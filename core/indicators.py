@@ -1,7 +1,7 @@
 # ============================================
 # TECHNICAL INDICATORS
 # ============================================
-# Matches Pine Script v3 logic
+# Matches Pine Script v5 logic
 
 import pandas as pd
 import numpy as np
@@ -18,12 +18,22 @@ def calculate_ema(series: pd.Series, period: int) -> pd.Series:
     return series.ewm(span=period, adjust=False).mean()
 
 
+def calculate_sma(series: pd.Series, period: int) -> pd.Series:
+    """Calculate Simple Moving Average"""
+    return series.rolling(window=period).mean()
+
+
 def calculate_emas(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate all EMAs (20, 50, 200)"""
+    """Calculate all EMAs (20, 50, 200) and MAs (5, 10, 100)"""
     df = df.copy()
     df['ema20'] = calculate_ema(df['close'], EMA_FAST)
     df['ema50'] = calculate_ema(df['close'], EMA_MEDIUM)
     df['ema200'] = calculate_ema(df['close'], EMA_SLOW)
+    
+    # Additional MAs from v5
+    df['ma5'] = calculate_sma(df['close'], 5)
+    df['ma10'] = calculate_sma(df['close'], 10)
+    df['ma100'] = calculate_sma(df['close'], 100)
     
     # EMA Alignment
     df['ema_bullish_alignment'] = (df['ema20'] > df['ema50']) & (df['ema50'] > df['ema200'])
@@ -71,7 +81,6 @@ def calculate_stochastic_rsi(df: pd.DataFrame) -> pd.DataFrame:
     # Overbought/Oversold conditions
     df['stoch_overbought'] = df['stoch_k'] > STOCH_OVERBOUGHT
     df['stoch_oversold'] = df['stoch_k'] < STOCH_OVERSOLD
-    df['stoch_neutral'] = ~df['stoch_overbought'] & ~df['stoch_oversold']
     
     # Crossovers
     df['stoch_k_cross_up'] = (df['stoch_k'] > df['stoch_d']) & (df['stoch_k'].shift(1) <= df['stoch_d'].shift(1))
@@ -92,14 +101,14 @@ def calculate_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> pd.DataFrame:
     df['atr'] = df['tr'].rolling(window=period).mean()
     df['atr_percent'] = (df['atr'] / df['close']) * 100
     
-    # Volatility check
-    df['is_volatile_enough'] = df['atr_percent'] >= 0.5  # minATR from Pine
+    # Volatility check (v5: minATR = 0.5%)
+    df['is_volatile_enough'] = df['atr_percent'] >= MIN_ATR_PERCENT
     
     return df
 
 
 def calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
-    """Calculate ADX (Average Directional Index)"""
+    """Calculate ADX (Average Directional Index) with DMI"""
     df = df.copy()
     
     # Calculate +DM and -DM
@@ -125,6 +134,10 @@ def calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
     df['is_trending'] = df['adx'] > ADX_THRESHOLD
     df['is_sideways'] = df['adx'] <= ADX_THRESHOLD
     
+    # DMI Crossovers (new in v5)
+    df['dmi_cross_up'] = (df['plus_di'] > df['minus_di']) & (df['plus_di'].shift(1) <= df['minus_di'].shift(1))
+    df['dmi_cross_down'] = (df['plus_di'] < df['minus_di']) & (df['plus_di'].shift(1) >= df['minus_di'].shift(1))
+    
     # Clean up
     df = df.drop(columns=['high_diff', 'low_diff', 'plus_dm', 'minus_dm', 'dx'], errors='ignore')
     
@@ -132,16 +145,17 @@ def calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
 
 
 def calculate_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate volume indicators"""
+    """Calculate volume indicators including OBV"""
     df = df.copy()
     
     # Average volume
     df['avg_volume'] = df['volume'].rolling(window=VOLUME_PERIOD).mean()
     df['volume_ratio'] = df['volume'] / df['avg_volume']
     
-    # Volume conditions
+    # Volume conditions (v5 thresholds)
     df['is_volume_spike'] = df['volume_ratio'] >= VOLUME_SPIKE_THRESHOLD
     df['is_unusual_volume'] = df['volume_ratio'] >= UNUSUAL_VOLUME_THRESHOLD
+    df['is_high_volume'] = df['volume'] > MIN_VOLUME
     
     # Volume on up/down bars
     df['price_change'] = df['close'].diff()
@@ -151,6 +165,215 @@ def calculate_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
     df['avg_volume_up'] = pd.Series(df['volume_on_up']).rolling(window=VOLUME_PERIOD).mean()
     df['avg_volume_down'] = pd.Series(df['volume_on_down']).rolling(window=VOLUME_PERIOD).mean()
     df['volume_bias_bullish'] = df['avg_volume_up'] > df['avg_volume_down']
+    
+    # === OBV (On Balance Volume) — NEW in v5 ===
+    obv_change = np.where(df['close'] > df['close'].shift(1), df['volume'],
+                 np.where(df['close'] < df['close'].shift(1), -df['volume'], 0))
+    df['obv'] = pd.Series(obv_change, index=df.index).cumsum()
+    df['obv_ema'] = calculate_ema(df['obv'], 20)
+    df['obv_bullish'] = df['obv'] > df['obv_ema']
+    
+    return df
+
+
+def calculate_macd(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate MACD (Moving Average Convergence Divergence) — NEW in v5"""
+    df = df.copy()
+    
+    ema_fast = calculate_ema(df['close'], MACD_FAST)
+    ema_slow = calculate_ema(df['close'], MACD_SLOW)
+    
+    df['macd_line'] = ema_fast - ema_slow
+    df['macd_signal'] = calculate_ema(df['macd_line'], MACD_SIGNAL)
+    df['macd_hist'] = df['macd_line'] - df['macd_signal']
+    
+    # Conditions
+    df['macd_bullish'] = df['macd_line'] > df['macd_signal']
+    df['macd_bearish'] = df['macd_line'] < df['macd_signal']
+    df['macd_cross_up'] = (df['macd_line'] > df['macd_signal']) & (df['macd_line'].shift(1) <= df['macd_signal'].shift(1))
+    df['macd_cross_down'] = (df['macd_line'] < df['macd_signal']) & (df['macd_line'].shift(1) >= df['macd_signal'].shift(1))
+    df['macd_hist_rising'] = df['macd_hist'] > df['macd_hist'].shift(1)
+    
+    return df
+
+
+def calculate_candlestick_patterns(df: pd.DataFrame) -> pd.DataFrame:
+    """Recognize 6 candlestick patterns — NEW in v5"""
+    df = df.copy()
+    
+    body = abs(df['close'] - df['open'])
+    upper_wick = df['high'] - df[['close', 'open']].max(axis=1)
+    lower_wick = df[['close', 'open']].min(axis=1) - df['low']
+    total_range = df['high'] - df['low']
+    is_bull = df['close'] > df['open']
+    is_bear = df['close'] < df['open']
+    
+    body1 = abs(df['close'].shift(1) - df['open'].shift(1))
+    is_bull1 = df['close'].shift(1) > df['open'].shift(1)
+    is_bear1 = df['close'].shift(1) < df['open'].shift(1)
+    
+    body2 = abs(df['close'].shift(2) - df['open'].shift(2))
+    is_bull2 = df['close'].shift(2) > df['open'].shift(2)
+    is_bear2 = df['close'].shift(2) < df['open'].shift(2)
+    
+    # Need supertrend direction for context
+    is_bullish_trend = df.get('direction', pd.Series(0, index=df.index)) == 1
+    is_bearish_trend = df.get('direction', pd.Series(0, index=df.index)) == -1
+    
+    # 1. Bullish Engulfing
+    df['bullish_engulfing'] = (is_bear1 & is_bull & 
+                               (df['close'] > df['open'].shift(1)) & 
+                               (df['open'] < df['close'].shift(1)) & 
+                               (body > body1))
+    
+    # 2. Bearish Engulfing  
+    df['bearish_engulfing'] = (is_bull1 & is_bear & 
+                               (df['close'] < df['open'].shift(1)) & 
+                               (df['open'] > df['close'].shift(1)) & 
+                               (body > body1))
+    
+    # 3. Hammer (bullish reversal at bottom)
+    df['is_hammer'] = ((lower_wick >= body * 2) & 
+                        (upper_wick < body * 0.5) & 
+                        (body > 0) & is_bearish_trend)
+    
+    # 4. Shooting Star (bearish reversal at top)
+    df['is_shooting_star'] = ((upper_wick >= body * 2) & 
+                               (lower_wick < body * 0.5) & 
+                               (body > 0) & is_bullish_trend)
+    
+    # 5. Morning Star (3-candle bullish reversal)
+    small_body1 = body1 < (total_range * 0.3)
+    df['morning_star'] = (is_bear2 & (body2 > 0) & small_body1 & is_bull & 
+                          (df['close'] > (df['open'].shift(2) + df['close'].shift(2)) / 2))
+    
+    # 6. Evening Star (3-candle bearish reversal)
+    df['evening_star'] = (is_bull2 & (body2 > 0) & small_body1 & is_bear & 
+                          (df['close'] < (df['open'].shift(2) + df['close'].shift(2)) / 2))
+    
+    # Combined pattern flags
+    df['bullish_pattern'] = df['bullish_engulfing'] | df['is_hammer'] | df['morning_star']
+    df['bearish_pattern'] = df['bearish_engulfing'] | df['is_shooting_star'] | df['evening_star']
+    
+    # Pattern name for display
+    def _pattern_name(row):
+        if row.get('bullish_engulfing', False): return "ENGULF▲"
+        if row.get('is_hammer', False): return "HAMMER"
+        if row.get('morning_star', False): return "M.STAR"
+        if row.get('bearish_engulfing', False): return "ENGULF▼"
+        if row.get('is_shooting_star', False): return "S.STAR"
+        if row.get('evening_star', False): return "E.STAR"
+        return ""
+    
+    df['pattern_name'] = df.apply(_pattern_name, axis=1)
+    
+    return df
+
+
+def calculate_support_resistance(df: pd.DataFrame, lookback: int = PIVOT_LOOKBACK) -> pd.DataFrame:
+    """Detect Support/Resistance using pivots — NEW in v5"""
+    df = df.copy()
+    
+    # Pivot highs and lows
+    df['pivot_high'] = df['high'].rolling(window=lookback*2+1, center=True).apply(
+        lambda x: x.iloc[lookback] if x.iloc[lookback] == x.max() else np.nan, raw=False
+    )
+    df['pivot_low'] = df['low'].rolling(window=lookback*2+1, center=True).apply(
+        lambda x: x.iloc[lookback] if x.iloc[lookback] == x.min() else np.nan, raw=False
+    )
+    
+    # Forward fill to carry the latest S/R levels
+    df['resistance'] = df['pivot_high'].ffill()
+    df['support'] = df['pivot_low'].ffill()
+    
+    # Near S/R detection
+    df['near_support'] = df['support'].notna() & (df['close'] <= df['support'] * 1.02)
+    df['near_resistance'] = df['resistance'].notna() & (df['close'] >= df['resistance'] * 0.98)
+    
+    return df
+
+
+def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
+    """Detect RSI/Price divergence — NEW in v5"""
+    df = df.copy()
+    
+    if 'rsi' not in df.columns:
+        df = calculate_rsi(df)
+    
+    # Bullish divergence: price makes lower low, RSI makes higher low
+    price_low1 = df['low'].rolling(window=5).min()
+    price_low2 = df['low'].shift(5).rolling(window=5).min()
+    rsi_low1 = df['rsi'].rolling(window=5).min()
+    rsi_low2 = df['rsi'].shift(5).rolling(window=5).min()
+    df['bullish_divergence'] = (price_low1 < price_low2) & (rsi_low1 > rsi_low2)
+    
+    # Bearish divergence: price makes higher high, RSI makes lower high
+    price_high1 = df['high'].rolling(window=5).max()
+    price_high2 = df['high'].shift(5).rolling(window=5).max()
+    rsi_high1 = df['rsi'].rolling(window=5).max()
+    rsi_high2 = df['rsi'].shift(5).rolling(window=5).max()
+    df['bearish_divergence'] = (price_high1 > price_high2) & (rsi_high1 < rsi_high2)
+    
+    return df
+
+
+def calculate_stop_loss(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate support-based stop loss (hybrid ATR + swing + S/R) — NEW in v5"""
+    df = df.copy()
+    
+    if 'atr' not in df.columns:
+        df = calculate_atr(df)
+    
+    # ATR-based SL
+    atr_sl = df['close'] - (df['atr'] * ATR_MULTIPLIER)
+    
+    # Swing-based SL
+    swing_sl = df['low'].rolling(window=SL_SWING_LOOKBACK).min()
+    
+    # Support-based SL (use support - 0.5*ATR, fallback to swing)
+    support_sl = np.where(
+        df.get('support', pd.Series(np.nan, index=df.index)).notna(),
+        df.get('support', swing_sl) - (df['atr'] * 0.5),
+        swing_sl
+    )
+    
+    # Pick the highest (closest to price) of the three
+    df['stop_loss'] = np.maximum(atr_sl, np.maximum(swing_sl, pd.Series(support_sl, index=df.index)))
+    
+    # Cap at max 5% from price
+    df['stop_loss'] = np.minimum(df['stop_loss'], df['close'] * 0.95)
+    # Ensure SL is below current price
+    df['stop_loss'] = np.minimum(df['stop_loss'], df['close'] * 0.999)
+    
+    # Calculate TP1
+    risk = df['close'] - df['stop_loss']
+    df['tp1'] = df['close'] + (risk * TP1_MULTIPLIER)
+    
+    return df
+
+
+def calculate_entry_zone(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate entry zone based on Fibonacci retracement (0.5-0.618)"""
+    df = df.copy()
+    
+    swing_high = df['high'].rolling(window=20).max()
+    swing_low = df['low'].rolling(window=20).min()
+    swing_range = swing_high - swing_low
+    
+    df['entry_zone_lower'] = swing_high - (swing_range * 0.618)
+    df['entry_zone_upper'] = swing_high - (swing_range * 0.50)
+    
+    return df
+
+
+def calculate_momentum(df: pd.DataFrame, period: int = MOMENTUM_PERIOD) -> pd.DataFrame:
+    """Calculate momentum indicators"""
+    df = df.copy()
+    
+    # Rate of Change
+    df['roc'] = ((df['close'] - df['close'].shift(period)) / df['close'].shift(period)) * 100
+    df['is_positive_momentum'] = df['roc'] > 0
+    df['is_strong_momentum'] = abs(df['roc']) > 5
     
     return df
 
@@ -189,33 +412,33 @@ def calculate_dca_zones(df: pd.DataFrame) -> pd.DataFrame:
     df['is_in_correction'] = df['price_from_high'] > 3  # Min 3% from high
     
     # EMA touch detection
-    df['ema20_touch'] = (df['low'] <= df['ema20']) & (df['close'] > df['ema20'] * 0.99) if 'ema20' in df.columns else False
-    df['ema50_touch'] = (df['low'] <= df['ema50']) & (df['close'] > df['ema50'] * 0.99) if 'ema50' in df.columns else False
-    
-    return df
-
-
-def calculate_momentum(df: pd.DataFrame, period: int = 10) -> pd.DataFrame:
-    """Calculate momentum indicators"""
-    df = df.copy()
-    
-    # Rate of Change
-    df['roc'] = ((df['close'] - df['close'].shift(period)) / df['close'].shift(period)) * 100
-    df['is_positive_momentum'] = df['roc'] > 0
-    df['is_strong_momentum'] = abs(df['roc']) > 5
+    if 'ema20' in df.columns:
+        df['ema20_touch'] = (df['low'] <= df['ema20']) & (df['close'] > df['ema20'] * 0.99)
+    else:
+        df['ema20_touch'] = False
+    if 'ema50' in df.columns:
+        df['ema50_touch'] = (df['low'] <= df['ema50']) & (df['close'] > df['ema50'] * 0.99)
+    else:
+        df['ema50_touch'] = False
     
     return df
 
 
 def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate all technical indicators"""
+    """Calculate all technical indicators (v5)"""
     df = calculate_emas(df)
     df = calculate_rsi(df)
     df = calculate_stochastic_rsi(df)
     df = calculate_atr(df)
     df = calculate_adx(df)
     df = calculate_volume_analysis(df)
+    df = calculate_macd(df)           # NEW v5
     df = calculate_momentum(df)
     df = calculate_dca_zones(df)
+    df = calculate_candlestick_patterns(df)  # NEW v5
+    df = calculate_support_resistance(df)     # NEW v5
+    df = calculate_divergence(df)             # NEW v5
+    df = calculate_stop_loss(df)              # NEW v5
+    df = calculate_entry_zone(df)             # NEW v5
     
     return df

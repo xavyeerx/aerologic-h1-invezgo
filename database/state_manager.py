@@ -142,11 +142,10 @@ class StateManager:
         today = datetime.now().strftime('%Y-%m-%d')
         self.daily_alerts = {
             'date': today,
-            'bullish_break': [],
-            'bearish_break': [],
-            'stoch_crossover': [],
+            'strong_buy': [],
             'accumulation': [],
-            'early_entry': []
+            'early_entry': [],
+            'bull_div': []
         }
         self._save_daily_alerts()
         logger.info(f"Daily alerts reset for {today}")

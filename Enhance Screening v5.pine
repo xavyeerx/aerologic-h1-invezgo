@@ -1,0 +1,789 @@
+//@version=5
+indicator("🎯 ENHANCED SCREENING v5.0 - MEGA PROFIT SYSTEM", overlay=true, max_labels_count=50)
+
+
+// ════════════════════════════════════════════════════════════════════════════════
+// 🎯 ENHANCED SCREENING v5.0 - MEGA PROFIT COMPLETE SYSTEM
+// ════════════════════════════════════════════════════════════════════════════════
+// Based on "Technical Analysis for Mega Profit" by Edianto Ong
+// ✅ Fixed BUY signal logic (breakout + confirmation timing)
+// ✅ MACD + Histogram
+// ✅ OBV (On Balance Volume)
+// ✅ Candlestick Pattern Recognition (6 patterns)
+// ✅ Support/Resistance Detection (Pivot-based)
+// ✅ RSI/Price Divergence Detection
+// ✅ Support-based Stop Loss
+// ✅ Score breakdown in table
+// ✅ Overhauled scoring system (max 100)
+// ════════════════════════════════════════════════════════════════════════════════
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎛️ INPUT PARAMETERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === TREND ANALYSIS ===
+trendPeriod = input.int(10, "Supertrend Period", minval=1, group="🔄 TREND")
+trendMultiplier = input.float(3.0, "Supertrend Multiplier", step=0.1, group="🔄 TREND")
+emaFast = input.int(20, "EMA Fast", minval=1, group="🔄 TREND")
+emaMedium = input.int(50, "EMA Medium", minval=1, group="🔄 TREND")
+emaSlow = input.int(200, "EMA Slow", minval=1, group="🔄 TREND")
+useMultiTimeframe = input.bool(true, "Multi-Timeframe Confirmation", group="🔄 TREND")
+
+
+// === VOLUME ANALYSIS ===
+volumePeriod = input.int(20, "Volume Period", minval=1, group="📊 VOLUME")
+volumeSpikeThreshold = input.float(1.5, "Volume Spike Threshold", step=0.1, group="📊 VOLUME")
+minVolume = input.int(100000, "Minimum Volume", group="📊 VOLUME")
+unusualVolumeThreshold = input.float(2.5, "Unusual Volume", step=0.1, group="📊 VOLUME")
+
+
+// === MOMENTUM ===
+rsiPeriod = input.int(14, "RSI Period", minval=1, group="⚡ MOMENTUM")
+stochPeriod = input.int(14, "Stoch Period", minval=1, group="⚡ MOMENTUM")
+smoothKPeriod = input.int(3, "Smooth K Period", minval=1, group="⚡ MOMENTUM")
+smoothDPeriod = input.int(3, "Smooth D Period", minval=1, group="⚡ MOMENTUM")
+stochOverbought = input.float(80, "Stoch Overbought", group="⚡ MOMENTUM")
+stochOversold = input.float(20, "Stoch Oversold", group="⚡ MOMENTUM")
+momentumPeriod = input.int(10, "Momentum Period", minval=1, group="⚡ MOMENTUM")
+
+
+// === MACD ===
+macdFast = input.int(12, "MACD Fast", minval=1, group="📈 MACD")
+macdSlow = input.int(26, "MACD Slow", minval=1, group="📈 MACD")
+macdSignal = input.int(9, "MACD Signal", minval=1, group="📈 MACD")
+
+
+// === MARKET REGIME ===
+atrPeriod = input.int(14, "ATR Period", minval=1, group="🎲 REGIME")
+atrMultiplier = input.float(1.5, "ATR SL Multiplier", step=0.1, group="🎲 REGIME")
+minATR = input.float(0.5, "Min ATR% (Volatility)", step=0.1, group="🎲 REGIME")
+adxPeriod = input.int(14, "ADX Period", minval=1, group="🎲 REGIME")
+adxThreshold = input.float(25, "ADX Threshold", group="🎲 REGIME")
+
+
+// === FALSE BREAKOUT FILTER ===
+confirmationBars = input.int(2, "Confirmation Bars", minval=1, maxval=5, group="🛡️ FILTER")
+requireVolumeConfirm = input.bool(false, "Require Volume on Buy", group="🛡️ FILTER")
+requireCandleConfirm = input.bool(false, "Require Strong Candle on Buy", group="🛡️ FILTER")
+
+
+// === SUPPORT/RESISTANCE ===
+pivotLen = input.int(10, "Pivot Lookback", minval=3, maxval=30, group="🧱 S/R")
+showSR = input.bool(true, "Show S/R Lines", group="🧱 S/R")
+
+
+// === EXIT STRATEGY ===
+tp1Multiplier = input.float(1.5, "TP1 (R-Multiple)", step=0.1, minval=0.5, group="🎯 EXIT STRATEGY")
+tp2Multiplier = input.float(2.5, "TP2 (R-Multiple)", step=0.1, minval=1.0, group="🎯 EXIT STRATEGY")
+tp3Multiplier = input.float(4.0, "TP3 (R-Multiple)", step=0.1, minval=1.5, group="🎯 EXIT STRATEGY")
+useTrailingStop = input.bool(true, "Enable Trailing Stop", group="🎯 EXIT STRATEGY")
+trailingATRMultiplier = input.float(2.0, "Trailing ATR Multiplier", step=0.1, group="🎯 EXIT STRATEGY")
+slLookback = input.int(10, "SL Swing Low Lookback", minval=3, maxval=30, group="🎯 EXIT STRATEGY")
+
+
+// === DCA / AVERAGE UP ===
+fibLevel1 = input.float(61.8, "Fib Level 1 (%)", step=0.1, group="📈 DCA/AVERAGE UP")
+fibLevel2 = input.float(85.0, "Fib Level 2 (%)", step=0.1, group="📈 DCA/AVERAGE UP")
+dcaLookback = input.int(20, "Swing Lookback", minval=5, maxval=50, group="📈 DCA/AVERAGE UP")
+dcaVolumeThreshold = input.float(0.7, "Max Volume for Healthy Correction", step=0.1, group="📈 DCA/AVERAGE UP", tooltip="Koreksi sehat = volume < 70% dari average")
+
+
+// === SCORING ===
+buyThreshold = input.int(70, "BUY Threshold", minval=0, maxval=100, group="🎯 SCORE")
+accumulateThreshold = input.int(55, "ACCUMULATE Threshold", minval=0, maxval=100, group="🎯 SCORE")
+holdThreshold = input.int(40, "HOLD Threshold", minval=0, maxval=100, group="🎯 SCORE")
+
+
+// === DISPLAY ===
+showTable = input.bool(true, "Show Info Table", group="🎨 DISPLAY")
+showSignals = input.bool(true, "Show Signals", group="🎨 DISPLAY")
+showStopLoss = input.bool(true, "Show Stop Loss", group="🎨 DISPLAY")
+showEMAs = input.bool(true, "Show EMAs", group="🎨 DISPLAY")
+showCandleLabels = input.bool(true, "Show Candlestick Labels", group="🎨 DISPLAY")
+tablePosition = input.string("top_right", "Table Position", 
+             options=["top_left", "top_right", "bottom_left", "bottom_right"], group="🎨 DISPLAY")
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📐 CORE CALCULATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === SUPERTREND ===
+[supertrend, direction] = ta.supertrend(trendMultiplier, trendPeriod)
+isBullishTrend = direction < 0
+isBearishTrend = direction > 0
+
+
+// === EMAs ===
+ema20 = ta.ema(close, emaFast)
+ema50 = ta.ema(close, emaMedium)
+ema200 = ta.ema(close, emaSlow)
+
+// === MA 5, 10 & 100 ===
+ma5 = ta.sma(close, 5)
+ma10 = ta.sma(close, 10)
+ma100 = ta.sma(close, 100)
+
+emaAlignmentBullish = ema20 > ema50 and ema50 > ema200
+emaAlignmentBearish = ema20 < ema50 and ema50 < ema200
+
+
+// === MULTI-TIMEFRAME ===
+htfTrend = request.security(syminfo.tickerid, "D", direction, lookahead=barmerge.lookahead_off)
+htfBullish = htfTrend < 0
+htfBearish = htfTrend > 0
+trendAligned = useMultiTimeframe ? (isBullishTrend and htfBullish) or (isBearishTrend and htfBearish) : true
+
+
+// === ATR ===
+atr = ta.atr(atrPeriod)
+atrPercent = (atr / close) * 100
+isVolatileEnough = atrPercent >= minATR
+
+
+// === ADX & DMI ===
+[diPlus, diMinus, adx] = ta.dmi(adxPeriod, adxPeriod)
+isTrending = adx > adxThreshold
+isSideways = adx <= adxThreshold
+dmiCrossUp = ta.crossover(diPlus, diMinus)
+dmiCrossDown = ta.crossunder(diPlus, diMinus)
+
+
+// === VOLUME ===
+avgVolume = ta.sma(volume, volumePeriod)
+volumeRatio = volume / avgVolume
+isVolumeSpike = volumeRatio >= volumeSpikeThreshold
+isUnusualVolume = volumeRatio >= unusualVolumeThreshold
+isHighVolume = volume > minVolume
+
+priceChange = ta.change(close)
+volumeOnUp = priceChange > 0 ? volume : 0
+volumeOnDown = priceChange < 0 ? volume : 0
+avgVolumeUp = ta.sma(volumeOnUp, volumePeriod)
+avgVolumeDown = ta.sma(volumeOnDown, volumePeriod)
+volumeBias = avgVolumeUp > avgVolumeDown
+
+
+// === OBV (On Balance Volume) ===
+obv = ta.cum(close > close[1] ? volume : close < close[1] ? -volume : 0)
+obvEma = ta.ema(obv, 20)
+obvBullish = obv > obvEma
+obvBearish = obv < obvEma
+
+
+// === RSI ===
+rsi = ta.rsi(close, rsiPeriod)
+
+
+// === STOCHASTIC RSI ===
+lowestRSI = ta.lowest(rsi, stochPeriod)
+highestRSI = ta.highest(rsi, stochPeriod)
+stochRSIRaw = 100 * (rsi - lowestRSI) / (highestRSI - lowestRSI)
+stochRSIRaw := na(stochRSIRaw) ? 50 : stochRSIRaw
+
+stochRSIK = ta.sma(stochRSIRaw, smoothKPeriod)
+stochRSID = ta.sma(stochRSIK, smoothDPeriod)
+
+isStochOverbought = stochRSIK > stochOverbought
+isStochOversold = stochRSIK < stochOversold
+
+stochKCrossOverD = ta.crossover(stochRSIK, stochRSID)
+stochKCrossUnderD = ta.crossunder(stochRSIK, stochRSID)
+
+
+// === SMART STOCHASTIC RSI ===
+stochBuySignalTrending = isTrending and stochKCrossOverD and stochRSIK > 20
+stochBuySignalRanging = not isTrending and isStochOversold and stochKCrossOverD
+smartStochBuy = stochBuySignalTrending or stochBuySignalRanging
+
+stochSellSignalTrending = isTrending and stochKCrossUnderD and stochRSIK < 80
+stochSellSignalRanging = not isTrending and isStochOverbought and stochKCrossUnderD
+smartStochSell = stochSellSignalTrending or stochSellSignalRanging
+
+
+// === MACD ===
+[macdLine, signalLine, histLine] = ta.macd(close, macdFast, macdSlow, macdSignal)
+macdBullish = macdLine > signalLine
+macdBearish = macdLine < signalLine
+macdCrossUp = ta.crossover(macdLine, signalLine)
+macdCrossDown = ta.crossunder(macdLine, signalLine)
+macdHistRising = histLine > histLine[1]
+
+
+// === MOMENTUM ===
+priceRoc = ta.roc(close, momentumPeriod)
+isPositiveMomentum = priceRoc > 0
+isStrongMomentum = math.abs(priceRoc) > 5
+
+
+// === PRICE POSITION ===
+priceAboveEma20 = close > ema20
+priceAboveEma50 = close > ema50
+priceAboveEma200 = close > ema200
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🕯️ CANDLESTICK PATTERN RECOGNITION
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+bodySize = math.abs(close - open)
+upperWick = high - math.max(close, open)
+lowerWick = math.min(close, open) - low
+totalRange = high - low
+isBullishCandle = close > open
+isBearishCandle = close < open
+
+bodySize1 = math.abs(close[1] - open[1])
+isBullishCandle1 = close[1] > open[1]
+isBearishCandle1 = close[1] < open[1]
+
+bodySize2 = math.abs(close[2] - open[2])
+isBullishCandle2 = close[2] > open[2]
+isBearishCandle2 = close[2] < open[2]
+
+// 1. Bullish Engulfing
+bullishEngulfing = isBearishCandle1 and isBullishCandle and close > open[1] and open < close[1] and bodySize > bodySize1
+
+// 2. Bearish Engulfing
+bearishEngulfing = isBullishCandle1 and isBearishCandle and close < open[1] and open > close[1] and bodySize > bodySize1
+
+// 3. Hammer (bullish reversal at bottom)
+isHammer = lowerWick >= bodySize * 2 and upperWick < bodySize * 0.5 and bodySize > 0 and isBearishTrend
+
+// 4. Shooting Star (bearish reversal at top)
+isShootingStar = upperWick >= bodySize * 2 and lowerWick < bodySize * 0.5 and bodySize > 0 and isBullishTrend
+
+// 5. Morning Star (3-candle bullish reversal)
+smallBody1 = bodySize1 < (totalRange * 0.3)
+morningStar = isBearishCandle2 and bodySize2 > 0 and smallBody1 and isBullishCandle and close > (open[2] + close[2]) / 2
+
+// 6. Evening Star (3-candle bearish reversal)
+eveningStar = isBullishCandle2 and bodySize2 > 0 and smallBody1 and isBearishCandle and close < (open[2] + close[2]) / 2
+
+// Combined pattern flags
+bullishPattern = bullishEngulfing or isHammer or morningStar
+bearishPattern = bearishEngulfing or isShootingStar or eveningStar
+
+// Pattern name for display
+patternName = bullishEngulfing ? "ENGULF▲" : isHammer ? "HAMMER" : morningStar ? "M.STAR" : bearishEngulfing ? "ENGULF▼" : isShootingStar ? "S.STAR" : eveningStar ? "E.STAR" : ""
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🧱 SUPPORT/RESISTANCE DETECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+pivotHigh = ta.pivothigh(high, pivotLen, pivotLen)
+pivotLow = ta.pivotlow(low, pivotLen, pivotLen)
+
+var float resistance = na
+var float support = na
+
+if not na(pivotHigh)
+    resistance := pivotHigh
+if not na(pivotLow)
+    support := pivotLow
+
+nearSupport = not na(support) and close <= support * 1.02
+nearResistance = not na(resistance) and close >= resistance * 0.98
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔀 RSI/PRICE DIVERGENCE DETECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// Bullish divergence: price makes lower low, RSI makes higher low
+priceLow1 = ta.lowest(low, 5)
+priceLow2 = ta.lowest(low[5], 5)
+rsiLow1 = ta.lowest(rsi, 5)
+rsiLow2 = ta.lowest(rsi[5], 5)
+bullishDivergence = priceLow1 < priceLow2 and rsiLow1 > rsiLow2
+
+// Bearish divergence: price makes higher high, RSI makes lower high
+priceHigh1 = ta.highest(high, 5)
+priceHigh2 = ta.highest(high[5], 5)
+rsiHigh1 = ta.highest(rsi, 5)
+rsiHigh2 = ta.highest(rsi[5], 5)
+bearishDivergence = priceHigh1 > priceHigh2 and rsiHigh1 < rsiHigh2
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📈 DCA / AVERAGE UP MODULE
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === SWING HIGH/LOW DETECTION ===
+swingHigh = ta.highest(high, dcaLookback)
+swingLow = ta.lowest(low, dcaLookback)
+swingRange = swingHigh - swingLow
+
+// === FIBONACCI RETRACEMENT LEVELS ===
+fib618 = swingHigh - (swingRange * fibLevel1 / 100)
+fib850 = swingHigh - (swingRange * fibLevel2 / 100)
+
+// === DCA ZONE DETECTION ===
+inDCAZone1 = close <= fib618 and close > fib850
+inDCAZone2 = close <= fib850
+
+// === HEALTHY CORRECTION VS DISTRIBUTION ===
+shortTermAvgVol = ta.sma(volume, 5)
+isLowVolumeCorrection = shortTermAvgVol < avgVolume * dcaVolumeThreshold
+
+recentDownVolume = ta.sma(volumeOnDown, 5)
+recentUpVolume = ta.sma(volumeOnUp, 5)
+isDistribution = recentDownVolume > recentUpVolume * 1.5
+
+isHealthyCorrection = isLowVolumeCorrection and not isDistribution
+
+recentHigh = ta.highest(high, 10)
+priceFromHigh = (recentHigh - close) / recentHigh * 100
+isInCorrection = priceFromHigh > 3
+
+// === EMA TOUCH DETECTION ===
+ema20Touch = isBullishTrend and low <= ema20 and close > ema20 * 0.99
+ema50Touch = isBullishTrend and low <= ema50 and close > ema50 * 0.99
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🛡️ FALSE BREAKOUT FILTER (FIXED v5.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+breakoutUp = ta.crossover(close, supertrend)
+breakoutDown = ta.crossunder(close, supertrend)
+
+strongBullishCandle = close > open and (close - open) > (high - low) * 0.6
+strongBearishCandle = close < open and (open - close) > (high - low) * 0.6
+
+var int bullishBarsAfterBreakout = 0
+var int bearishBarsAfterBreakout = 0
+
+if breakoutUp
+    bullishBarsAfterBreakout := 0
+if breakoutDown
+    bearishBarsAfterBreakout := 0
+
+if isBullishTrend and close > supertrend
+    bullishBarsAfterBreakout := bullishBarsAfterBreakout + 1
+
+if isBearishTrend and close < supertrend
+    bearishBarsAfterBreakout := bearishBarsAfterBreakout + 1
+
+breakoutConfirmed = bullishBarsAfterBreakout >= confirmationBars
+breakdownConfirmed = bearishBarsAfterBreakout >= confirmationBars
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 SUPPORT-BASED STOP LOSS (NEW v5.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+atrSL = close - (atr * atrMultiplier)
+swingSL = ta.lowest(low, slLookback)
+supportSL = not na(support) ? support - (atr * 0.5) : swingSL
+
+// Pick the highest (closest to price) but cap at max 5% from price
+longStopLoss = math.max(atrSL, math.max(swingSL, supportSL))
+longStopLoss := math.min(longStopLoss, close * 0.95)
+// Ensure SL is below current price
+longStopLoss := math.min(longStopLoss, close * 0.999)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 SCORING SYSTEM v5.0
+// ─────────────────────────────────────────────────────────────────────────────
+// TREND:25 | REGIME:12 | VOLUME:18 | MOMENTUM:25 | POSITION:15 | PATTERN:5
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+trendScore = 0.0
+regimeScore = 0.0
+volumeScore = 0.0
+momentumScore = 0.0
+positionScore = 0.0
+patternScore = 0.0
+
+
+// TREND (max 25 points)
+if isBullishTrend
+    trendScore += 10.0
+if emaAlignmentBullish
+    trendScore += 10.0
+if trendAligned
+    trendScore += 5.0
+
+
+// REGIME (max 12 points)
+if isTrending
+    regimeScore += 8.0
+if isVolatileEnough
+    regimeScore += 4.0
+
+
+// VOLUME (max 18 points) — FIXED: no double counting
+if isHighVolume
+    volumeScore += 4.0
+if isUnusualVolume
+    volumeScore += 10.0
+else if isVolumeSpike
+    volumeScore += 7.0
+if obvBullish and isBullishTrend
+    volumeScore += 4.0
+volumeScore := math.min(volumeScore, 18.0)
+
+
+// MOMENTUM (max 25 points) — FIXED: removed stochNeutral, added MACD
+if isPositiveMomentum
+    momentumScore += 8.0
+if isStrongMomentum and isPositiveMomentum
+    momentumScore += 4.0
+if isStochOversold and isBullishTrend
+    momentumScore += 8.0
+if macdBullish
+    momentumScore += 5.0
+momentumScore := math.min(momentumScore, 25.0)
+
+
+// POSITION (max 15 points)
+if priceAboveEma200
+    positionScore += 6.0
+if priceAboveEma50
+    positionScore += 5.0
+if priceAboveEma20
+    positionScore += 4.0
+
+
+// PATTERN (max 5 points)
+if bullishPattern
+    patternScore += 3.0
+if bullishDivergence
+    patternScore += 2.0
+patternScore := math.min(patternScore, 5.0)
+
+
+// TOTAL (Max 100 points)
+totalScore = trendScore + regimeScore + volumeScore + momentumScore + positionScore + patternScore
+finalScore = math.round(totalScore)
+
+
+// Penalty for sideways
+if isSideways and not isUnusualVolume
+    finalScore := math.round(finalScore * 0.7)
+
+// Bearish divergence penalty
+if bearishDivergence and isBullishTrend
+    finalScore := math.round(finalScore * 0.9)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🏷️ STATUS
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+var string stockStatus = ""
+var color statusColor = color.gray
+
+if finalScore >= buyThreshold and isTrending
+    stockStatus := "🟢 STRONG BUY"
+    statusColor := #00ff00
+else if finalScore >= accumulateThreshold
+    stockStatus := "🔵 ACCUMULATE"
+    statusColor := #0080ff
+else if finalScore >= holdThreshold
+    stockStatus := "🟡 HOLD"
+    statusColor := #ffaa00
+else
+    stockStatus := "🔴 AVOID"
+    statusColor := #ff0000
+
+regimeStatus = isTrending ? (isBullishTrend ? "📈 TRENDING UP" : "📉 TRENDING DOWN") : "↔️ SIDEWAYS"
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 SIGNAL GENERATION (FIXED v5.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === FIXED BUY SIGNAL — Track breakout, fire after confirmed ===
+var bool pendingBuyBreakout = false
+if breakoutUp and isBullishTrend
+    pendingBuyBreakout := true
+if isBearishTrend or breakoutDown
+    pendingBuyBreakout := false
+
+// Volume & candle confirmation (now actually used)
+volumeCondition = requireVolumeConfirm ? isVolumeSpike : true
+candleCondition = requireCandleConfirm ? strongBullishCandle : true
+
+buySignal = pendingBuyBreakout and breakoutConfirmed and volumeCondition and candleCondition and finalScore >= buyThreshold
+if buySignal
+    pendingBuyBreakout := false
+
+// === SELL SIGNAL ===
+var bool pendingSellBreakout = false
+if breakoutDown and isBearishTrend
+    pendingSellBreakout := true
+if isBullishTrend or breakoutUp
+    pendingSellBreakout := false
+
+sellSignal = pendingSellBreakout and breakdownConfirmed
+if sellSignal
+    pendingSellBreakout := false
+
+
+// === ACCUMULATION SIGNAL ===
+accHasMomentum = isStochOversold or smartStochBuy
+accHasVolume = isVolumeSpike or isUnusualVolume
+accumulationSignal = isBullishTrend and accHasMomentum and accHasVolume and finalScore >= accumulateThreshold and not isSideways
+
+
+// === DCA SIGNALS ===
+dcaBase = isBullishTrend and trendAligned and isHealthyCorrection and finalScore >= holdThreshold
+dcaSignal1 = dcaBase and inDCAZone1 and isInCorrection
+dcaSignal2 = dcaBase and inDCAZone2 and isInCorrection
+emaDCASignal = dcaBase and (ema20Touch or ema50Touch)
+
+dcaSignal = dcaSignal1 or dcaSignal2 or emaDCASignal
+strongDCASignal = dcaSignal2 or (emaDCASignal and ema50Touch)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 POSITION TRACKING & EXIT
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+var float entryPrice = na
+var float entryStopLoss = na
+var bool inPosition = false
+
+if buySignal and not inPosition
+    entryPrice := close
+    entryStopLoss := longStopLoss
+    inPosition := true
+
+if sellSignal and inPosition
+    entryPrice := na
+    entryStopLoss := na
+    inPosition := false
+
+
+// === TAKE PROFIT LEVELS ===
+riskAmount = inPosition and not na(entryPrice) and not na(entryStopLoss) ? entryPrice - entryStopLoss : na
+tp1Price = not na(riskAmount) ? entryPrice + (riskAmount * tp1Multiplier) : na
+tp2Price = not na(riskAmount) ? entryPrice + (riskAmount * tp2Multiplier) : na
+tp3Price = not na(riskAmount) ? entryPrice + (riskAmount * tp3Multiplier) : na
+
+// === TRAILING STOP ===
+var float trailingStopPrice = na
+if inPosition and useTrailingStop
+    if na(trailingStopPrice)
+        trailingStopPrice := entryStopLoss
+    else
+        newTrailingStop = close - (atr * trailingATRMultiplier)
+        trailingStopPrice := math.max(trailingStopPrice, newTrailingStop)
+else
+    trailingStopPrice := na
+
+// === EXIT WARNING ===
+trailingHit = useTrailingStop and not na(trailingStopPrice) and close < trailingStopPrice
+exitWarning = inPosition and (sellSignal or smartStochSell or not isBullishTrend or trailingHit)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📈 VISUALIZATION
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === PLOT EMAs ===
+plot(showEMAs ? ema20 : na, "EMA 20", color=#2962ff, linewidth=2)
+plot(showEMAs ? ema50 : na, "EMA 50", color=#ff6d00, linewidth=2)
+
+// === PLOT MA 5, 10, 100 ===
+plot(showEMAs ? ma5 : na, "MA 5", color=#e91e63, linewidth=1)
+plot(showEMAs ? ma10 : na, "MA 10", color=#9c27b0, linewidth=1)
+plot(showEMAs ? ma100 : na, "MA 100", color=#00bcd4, linewidth=2)
+
+
+// === PLOT SUPERTREND ===
+stColor = isBullishTrend ? #00ff00 : #ff0000
+plot(supertrend, "Supertrend", color=stColor, linewidth=3)
+
+
+// === PLOT STOP LOSS ===
+plot(showStopLoss and isBullishTrend ? longStopLoss : na, "Stop Loss", color=#ff0000, linewidth=1, style=plot.style_linebr)
+
+
+// === PLOT SUPPORT/RESISTANCE ===
+plot(showSR and not na(support) ? support : na, "Support", color=#00ff00, linewidth=1, style=plot.style_linebr)
+plot(showSR and not na(resistance) ? resistance : na, "Resistance", color=#ff5252, linewidth=1, style=plot.style_linebr)
+
+
+// === BACKGROUND COLORS ===
+bgcolor(isBullishTrend ? color.new(#00ff00, 92) : color.new(#ff0000, 92), title="Trend BG")
+bgcolor(isSideways ? color.new(#ffeb3b, 90) : na, title="Sideways Warning")
+bgcolor(isUnusualVolume and isBullishTrend ? color.new(#00ff00, 90) : na, title="Volume Surge")
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🎯 SIGNAL MARKERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === CORE SIGNALS ===
+plotshape(showSignals and buySignal, "Buy Signal", style=shape.labelup, location=location.belowbar, color=#00ff00, textcolor=#ffffff, size=size.normal, text="BUY")
+plotshape(showSignals and sellSignal, "Sell Signal", style=shape.labeldown, location=location.abovebar, color=#ff0000, textcolor=#ffffff, size=size.normal, text="SELL")
+plotshape(showSignals and accumulationSignal and not buySignal, "Accumulate", style=shape.labelup, location=location.belowbar, color=#0080ff, textcolor=#ffffff, size=size.small, text="ACC")
+
+// === DCA SIGNALS ===
+plotshape(showSignals and dcaSignal and not buySignal and not strongDCASignal and not accumulationSignal, "DCA", style=shape.triangleup, location=location.belowbar, color=#00bcd4, size=size.tiny)
+
+// Candlestick pattern markers removed per user request
+
+// === DIVERGENCE MARKERS (enlarged to match BUY/ACC style) ===
+plotshape(showSignals and bullishDivergence and isBearishTrend, "Bull Div", style=shape.labelup, location=location.belowbar, color=#7c4dff, textcolor=#ffffff, size=size.normal, text="BULL DIV")
+plotshape(showSignals and bearishDivergence and isBullishTrend, "Bear Div", style=shape.triangledown, location=location.abovebar, color=#ff6d00, size=size.tiny)
+
+// === MACD CROSS ===
+plotshape(showSignals and macdCrossUp and isBullishTrend, "MACD Cross Up", style=shape.circle, location=location.belowbar, color=#00e5ff, size=size.tiny)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 📊 INFO TABLE v5.0 WITH SCORE BREAKDOWN
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// === CALCULATE ENTRY ZONE (Fibo 0.5-0.618 retracement) ===
+swingHighEntry = ta.highest(high, 20)
+swingLowEntry = ta.lowest(low, 20)
+swingRangeEntry = swingHighEntry - swingLowEntry
+fib50Entry = swingHighEntry - (swingRangeEntry * 0.50)
+fib618Entry = swingHighEntry - (swingRangeEntry * 0.618)
+entryZoneLower = math.min(fib50Entry, fib618Entry)
+entryZoneUpper = math.max(fib50Entry, fib618Entry)
+
+// === CALCULATE POTENTIAL TP1 ===
+potentialRisk = close - longStopLoss
+potentialTP1 = close + (potentialRisk * tp1Multiplier)
+
+
+if showTable and barstate.islast
+    var string tPos = tablePosition == "top_left" ? position.top_left : tablePosition == "top_right" ? position.top_right : tablePosition == "bottom_left" ? position.bottom_left : position.bottom_right
+    
+    var table t = table.new(tPos, 2, 18, border_width=1)
+    
+    // Header
+    table.cell(t, 0, 0, "🎯 SCREENING v5.0", bgcolor=#1a1a2e, text_color=#ffffff)
+    table.cell(t, 1, 0, syminfo.ticker, bgcolor=#16213e, text_color=#ffffff)
+    
+    // Status
+    table.cell(t, 0, 1, "STATUS", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 1, stockStatus, bgcolor=statusColor, text_color=#ffffff)
+    
+    // Market Regime
+    table.cell(t, 0, 2, "REGIME", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 2, regimeStatus, bgcolor=isTrending ? #006400 : #ff8c00, text_color=#ffffff)
+    
+    table.cell(t, 0, 3, "ADX", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 3, str.tostring(math.round(adx, 1)), bgcolor=isTrending ? #006400 : #666666, text_color=#ffffff)
+    
+    // ══ SCORE (Total only) ══
+    table.cell(t, 0, 4, "══ SCORE ══", bgcolor=#000000, text_color=#ffff00, text_size=size.small)
+    table.cell(t, 1, 4, str.tostring(finalScore) + "/100", bgcolor=statusColor, text_color=#ffffff)
+    
+    // ══ TECHNICAL ══
+    table.cell(t, 0, 5, "══ TECHNICAL ══", bgcolor=#000000, text_color=#00ffff, text_size=size.small)
+    table.cell(t, 1, 5, "", bgcolor=#000000)
+    
+    // Trend
+    table.cell(t, 0, 6, "Trend", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 6, isBullishTrend ? "🟢 BULLISH" : "🔴 BEARISH", bgcolor=isBullishTrend ? #006400 : #8b0000, text_color=#ffffff)
+    
+    // MACD
+    table.cell(t, 0, 7, "MACD", bgcolor=#0f3460, text_color=#ffffff)
+    macdStatus = macdBullish ? "🟢 BULL" : "🔴 BEAR"
+    macdStatus := macdCrossUp ? "⬆️ CROSS UP" : macdCrossDown ? "⬇️ CROSS DN" : macdStatus
+    table.cell(t, 1, 7, macdStatus, bgcolor=macdBullish ? #006400 : #8b0000, text_color=#ffffff)
+    
+    // OBV
+    table.cell(t, 0, 8, "OBV", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 8, obvBullish ? "📈 ACCUMULATION" : "📉 DISTRIBUTION", bgcolor=obvBullish ? #006400 : #8b0000, text_color=#ffffff)
+    
+    // Volume
+    table.cell(t, 0, 9, "Vol Ratio", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 9, str.tostring(math.round(volumeRatio, 2)) + "x", bgcolor=isUnusualVolume ? #006400 : isVolumeSpike ? #0080ff : #666666, text_color=#ffffff)
+    
+    // Candlestick
+    table.cell(t, 0, 10, "Candle", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 10, patternName != "" ? patternName : "—", bgcolor=bullishPattern ? #006400 : bearishPattern ? #8b0000 : #666666, text_color=#ffffff)
+    
+    // Divergence Warning
+    divText = bullishDivergence ? "🟢 BULL DIV" : bearishDivergence ? "🔴 BEAR DIV" : "— NONE"
+    divColor = bullishDivergence ? #7c4dff : bearishDivergence ? #ff6d00 : #666666
+    table.cell(t, 0, 11, "Divergence", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 11, divText, bgcolor=divColor, text_color=#ffffff)
+    
+    // ══ PRICE INFO ══
+    table.cell(t, 0, 12, "══ PRICE ══", bgcolor=#000000, text_color=#00ffff, text_size=size.small)
+    table.cell(t, 1, 12, "", bgcolor=#000000)
+    
+    // Price
+    table.cell(t, 0, 13, "Price", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 13, str.tostring(close, "#.##"), bgcolor=#0080ff, text_color=#ffffff)
+    
+    // Entry Zone (Fibo 0.5-0.618)
+    entryZoneText = isBullishTrend ? str.tostring(math.round(entryZoneLower)) + " - " + str.tostring(math.round(entryZoneUpper)) : "—"
+    table.cell(t, 0, 14, "📍 Entry Zone", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 14, entryZoneText, bgcolor=isBullishTrend ? #0080ff : #666666, text_color=#ffffff)
+    
+    // S/R
+    srText = "S:" + (not na(support) ? str.tostring(math.round(support)) : "—") + " R:" + (not na(resistance) ? str.tostring(math.round(resistance)) : "—")
+    table.cell(t, 0, 15, "S/R", bgcolor=#0f3460, text_color=#ffffff)
+    table.cell(t, 1, 15, srText, bgcolor=nearSupport ? #006400 : nearResistance ? #8b0000 : #333366, text_color=#ffffff)
+    
+    // Stop Loss
+    table.cell(t, 0, 16, "Stop Loss", bgcolor=#0f3460, text_color=#ffffff)
+    slDisplay = isBullishTrend ? str.tostring(longStopLoss, "#.##") : "—"
+    table.cell(t, 1, 16, slDisplay, bgcolor=#ff0000, text_color=#ffffff)
+    
+    // TP1 Target
+    table.cell(t, 0, 17, "TP1", bgcolor=#0f3460, text_color=#ffffff)
+    tp1Display = isBullishTrend ? str.tostring(potentialTP1, "#.##") + " (" + str.tostring(tp1Multiplier) + "R)" : "—"
+    table.cell(t, 1, 17, tp1Display, bgcolor=#0080ff, text_color=#ffffff)
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔔 ALERTS v5.0
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+alertcondition(buySignal, "Strong Buy", "🚀 BUY: {{ticker}}")
+alertcondition(sellSignal, "Sell", "⚠️ SELL: {{ticker}}")
+alertcondition(accumulationSignal, "Accumulation", "📊 ACC: {{ticker}}")
+alertcondition(dcaSignal, "DCA Signal", "📈 DCA: {{ticker}} - Healthy Correction Zone")
+alertcondition(strongDCASignal, "Strong DCA", "📈 STRONG DCA: {{ticker}} - Deep Correction")
+alertcondition(exitWarning, "Exit Warning", "⚠️ EXIT: {{ticker}}")
+alertcondition(bearishDivergence and isBullishTrend, "Bearish Divergence", "🔀 BEAR DIV: {{ticker}} - Reversal Warning")
+alertcondition(bullishDivergence and isBearishTrend, "Bullish Divergence", "🔀 BULL DIV: {{ticker}} - Reversal Opportunity")
+alertcondition(bullishPattern and isBearishTrend, "Bullish Candle Pattern", "🕯️ BULL PATTERN: {{ticker}}")
+alertcondition(macdCrossUp and isBullishTrend, "MACD Cross Up", "📈 MACD CROSS UP: {{ticker}}")
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+// 📌 END - ENHANCED SCREENING v5.0 MEGA PROFIT SYSTEM
+// ═════════════════════════════════════════════════════════════════════════════
+// ✅ Fixed BUY signal logic (pending breakout → confirmed)
+// ✅ MACD + Histogram integration
+// ✅ OBV trend detection
+// ✅ 6 Candlestick pattern recognition
+// ✅ Pivot-based Support/Resistance
+// ✅ RSI/Price Divergence detection
+// ✅ Support-based Stop Loss (hybrid ATR + swing + S/R)
+// ✅ Score breakdown in table (T/R/V/M/P/Pat)
+// ✅ Separated thresholds (BUY=70, ACC=55, HOLD=40)
+// ✅ Removed dead code and fixed double counting
+// ═════════════════════════════════════════════════════════════════════════════

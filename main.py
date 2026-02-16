@@ -46,7 +46,7 @@ def is_trading_hours() -> bool:
     if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
         return False
     
-    # Check trading hours (09:00 - 16:00 WIB)
+    # Check trading hours (08:50 - 16:15 WIB)
     current_time = now.hour * 100 + now.minute
     start_time = TRADING_START_HOUR * 100 + TRADING_START_MINUTE
     end_time = TRADING_END_HOUR * 100 + TRADING_END_MINUTE
@@ -144,11 +144,10 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # Summary
     summary = {
         'stocks_scanned': len(stock_data),
-        'bullish_breaks': len(new_signals['bullish_break']),
-        'bearish_breaks': len(new_signals['bearish_break']),
-        'stoch_crossovers': len(new_signals['stoch_crossover']),
+        'strong_buys': len(new_signals['strong_buy']),
         'accumulations': len(new_signals['accumulation']),
         'early_entries': len(new_signals['early_entry']),
+        'bull_divs': len(new_signals['bull_div']),
         'timestamp': datetime.now(WIB).isoformat()
     }
     

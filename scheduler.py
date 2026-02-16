@@ -72,7 +72,7 @@ def main():
     logger.info("="*50)
     logger.info("Scan interval: 1 minute")
     logger.info("Evening scan: 18:00 WIB")
-    logger.info("Trading hours: 09:00 - 16:00 WIB")
+    logger.info("Trading hours: 08:50 - 16:15 WIB")
     logger.info("="*50)
     
     # Initialize state manager

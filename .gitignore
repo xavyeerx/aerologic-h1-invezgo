@@ -21,3 +21,4 @@ database/*.json
 # OS
 .DS_Store
 Thumbs.db
+nul
