@@ -317,51 +317,26 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def calculate_stop_loss(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate support-based stop loss (hybrid ATR + swing + S/R) — NEW in v5"""
+def calculate_targets(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate TP1 (quick target) and TP Swing (swing target)"""
     df = df.copy()
     
     if 'atr' not in df.columns:
         df = calculate_atr(df)
     
-    # ATR-based SL
-    atr_sl = df['close'] - (df['atr'] * ATR_MULTIPLIER)
+    # TP1 = target terdekat & tercepat (close + 1×ATR)
+    df['tp1'] = df['close'] + df['atr']
     
-    # Swing-based SL
-    swing_sl = df['low'].rolling(window=SL_SWING_LOOKBACK).min()
+    # TP Swing = target swing lebih besar (close + 1.5×ATR)
+    # If resistance is available and closer than ATR-based, use resistance
+    atr_swing = df['close'] + (df['atr'] * TP1_MULTIPLIER)
     
-    # Support-based SL (use support - 0.5*ATR, fallback to swing)
-    support_sl = np.where(
-        df.get('support', pd.Series(np.nan, index=df.index)).notna(),
-        df.get('support', swing_sl) - (df['atr'] * 0.5),
-        swing_sl
-    )
-    
-    # Pick the highest (closest to price) of the three
-    df['stop_loss'] = np.maximum(atr_sl, np.maximum(swing_sl, pd.Series(support_sl, index=df.index)))
-    
-    # Cap at max 5% from price
-    df['stop_loss'] = np.minimum(df['stop_loss'], df['close'] * 0.95)
-    # Ensure SL is below current price
-    df['stop_loss'] = np.minimum(df['stop_loss'], df['close'] * 0.999)
-    
-    # Calculate TP1
-    risk = df['close'] - df['stop_loss']
-    df['tp1'] = df['close'] + (risk * TP1_MULTIPLIER)
-    
-    return df
-
-
-def calculate_entry_zone(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate entry zone based on Fibonacci retracement (0.5-0.618)"""
-    df = df.copy()
-    
-    swing_high = df['high'].rolling(window=20).max()
-    swing_low = df['low'].rolling(window=20).min()
-    swing_range = swing_high - swing_low
-    
-    df['entry_zone_lower'] = swing_high - (swing_range * 0.618)
-    df['entry_zone_upper'] = swing_high - (swing_range * 0.50)
+    if 'resistance' in df.columns:
+        # Use nearest resistance if it's above price, else use ATR-based
+        resistance_valid = df['resistance'].notna() & (df['resistance'] > df['close'])
+        df['tp_swing'] = np.where(resistance_valid, df['resistance'], atr_swing)
+    else:
+        df['tp_swing'] = atr_swing
     
     return df
 
@@ -438,7 +413,6 @@ def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df = calculate_candlestick_patterns(df)  # NEW v5
     df = calculate_support_resistance(df)     # NEW v5
     df = calculate_divergence(df)             # NEW v5
-    df = calculate_stop_loss(df)              # NEW v5
-    df = calculate_entry_zone(df)             # NEW v5
+    df = calculate_targets(df)                # TP1 + TP Swing
     
     return df

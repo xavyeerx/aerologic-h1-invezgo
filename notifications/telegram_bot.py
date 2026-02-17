@@ -58,18 +58,15 @@ def send_telegram_message(message: str) -> bool:
         return False
 
 
-def _format_entry_info(r) -> str:
-    """Format entry strategy info (SL, TP1) for a stock"""
+def _format_tp_info(r) -> str:
+    """Format target price info (TP1 + TP Swing) for a stock"""
     lines = []
-    if r.stop_loss and r.stop_loss > 0:
-        sl_pct = ((r.price - r.stop_loss) / r.price) * 100
-        lines.append(f"   📍 Entry: {r.price:,.0f}")
-        lines.append(f"   🔴 SL: {r.stop_loss:,.0f} (-{sl_pct:.1f}%)")
     if r.tp1 and r.tp1 > 0:
-        tp_pct = ((r.tp1 - r.price) / r.price) * 100
-        lines.append(f"   🎯 TP1: {r.tp1:,.0f} (+{tp_pct:.1f}%)")
-    if r.entry_zone_lower and r.entry_zone_upper and r.entry_zone_lower > 0:
-        lines.append(f"   📐 Zone: {r.entry_zone_lower:,.0f} - {r.entry_zone_upper:,.0f}")
+        tp1_pct = ((r.tp1 - r.price) / r.price) * 100
+        lines.append(f"   🎯 TP1: {r.tp1:,.0f} (+{tp1_pct:.1f}%)")
+    if r.tp_swing and r.tp_swing > 0:
+        tps_pct = ((r.tp_swing - r.price) / r.price) * 100
+        lines.append(f"   🏹 TP Swing: {r.tp_swing:,.0f} (+{tps_pct:.1f}%)")
     return "\n".join(lines)
 
 
@@ -91,9 +88,9 @@ def format_strong_buy_message(results: List) -> str:
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         lines.append(f"   └─ Score: {r.score} | MACD: {r.macd_status} | Vol: {r.volume_ratio:.1f}x")
-        entry_info = _format_entry_info(r)
-        if entry_info:
-            lines.append(entry_info)
+        tp_info = _format_tp_info(r)
+        if tp_info:
+            lines.append(tp_info)
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -121,9 +118,9 @@ def format_accumulation_message(results: List) -> str:
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"📊 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         lines.append(f"   └─ Score: {r.score} | OBV: {r.obv_status} | Vol: {r.volume_ratio:.1f}x")
-        entry_info = _format_entry_info(r)
-        if entry_info:
-            lines.append(entry_info)
+        tp_info = _format_tp_info(r)
+        if tp_info:
+            lines.append(tp_info)
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -150,9 +147,9 @@ def format_bull_div_message(results: List) -> str:
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f}")
-        entry_info = _format_entry_info(r)
-        if entry_info:
-            lines.append(entry_info)
+        tp_info = _format_tp_info(r)
+        if tp_info:
+            lines.append(tp_info)
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -350,8 +347,8 @@ def send_morning_recap_message(signals: dict):
         for r in strong_buy:
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.stop_loss and r.stop_loss > 0:
-                section_lines.append(f"  SL: {r.stop_loss:,.0f} | TP1: {r.tp1:,.0f}")
+            if r.tp1 and r.tp1 > 0:
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(strong_buy)
@@ -363,8 +360,8 @@ def send_morning_recap_message(signals: dict):
         for r in acc:
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.stop_loss and r.stop_loss > 0:
-                section_lines.append(f"  SL: {r.stop_loss:,.0f} | TP1: {r.tp1:,.0f}")
+            if r.tp1 and r.tp1 > 0:
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(acc)
@@ -386,8 +383,8 @@ def send_morning_recap_message(signals: dict):
         for r in early:
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Koreksi: {r.correction_percent:.1f}%")
-            if r.stop_loss and r.stop_loss > 0:
-                section_lines.append(f"  SL: {r.stop_loss:,.0f} | TP1: {r.tp1:,.0f}")
+            if r.tp1 and r.tp1 > 0:
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(early)
@@ -399,8 +396,8 @@ def send_morning_recap_message(signals: dict):
         for r in div:
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.stop_loss and r.stop_loss > 0:
-                section_lines.append(f"  SL: {r.stop_loss:,.0f} | TP1: {r.tp1:,.0f}")
+            if r.tp1 and r.tp1 > 0:
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(div)

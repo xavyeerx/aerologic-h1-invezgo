@@ -33,11 +33,9 @@ class ScanResult:
         self.is_early_entry = False
         self.is_bull_div = False           # NEW v5: bullish divergence
         
-        # Entry strategy info
-        self.stop_loss = 0.0
-        self.tp1 = 0.0
-        self.entry_zone_lower = 0.0
-        self.entry_zone_upper = 0.0
+        # Target prices
+        self.tp1 = 0.0              # Quick target (1×ATR)
+        self.tp_swing = 0.0         # Swing target (1.5×ATR or resistance)
         
         # Additional info
         self.volume_ratio = 0.0
@@ -90,11 +88,9 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         result.stoch_k = latest.get('stoch_k', 50.0)
         result.stoch_d = latest.get('stoch_d', 50.0)
         
-        # Entry strategy info
-        result.stop_loss = latest.get('stop_loss', 0.0)
+        # Target prices
         result.tp1 = latest.get('tp1', 0.0)
-        result.entry_zone_lower = latest.get('entry_zone_lower', 0.0)
-        result.entry_zone_upper = latest.get('entry_zone_upper', 0.0)
+        result.tp_swing = latest.get('tp_swing', 0.0)
         
         # v5 additional data
         result.adx = latest.get('adx', 0.0)
