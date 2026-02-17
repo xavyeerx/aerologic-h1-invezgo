@@ -185,9 +185,9 @@ def format_early_entry_message(results: List) -> str:
         
         lines.append(f"{emoji} <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         lines.append(f"   └─ Koreksi: {r.correction_percent:.1f}% | Strength: {strength}/7")
-        entry_info = _format_entry_info(r)
-        if entry_info:
-            lines.append(entry_info)
+        tp_info = _format_tp_info(r)
+        if tp_info:
+            lines.append(tp_info)
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
