@@ -1,6 +1,8 @@
 # ============================================
-# SCHEDULER - RUN SCAN EVERY 5 MINUTES
+# SCHEDULER - RUN SCANS
 # ============================================
+# Recap: 08:50 (market open) and 16:15 (market close)
+# Alerts: every 1 minute during trading hours (only NEW signals)
 
 import schedule
 import time
@@ -11,7 +13,7 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from main import run_scan, is_trading_hours, send_end_of_day_recap, is_end_of_trading, run_evening_scan, is_evening_scan_time
+from main import run_scan, is_trading_hours, is_market_open_time, is_market_close_time, run_full_recap
 from database.state_manager import StateManager
 from notifications.telegram_bot import send_startup_message, send_telegram_message
 
@@ -25,35 +27,55 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global state manager
+# Global state
 state_manager = None
+recap_sent_open = False
+recap_sent_close = False
 
 
 def scheduled_scan():
     """Run scheduled scan"""
-    global state_manager
+    global state_manager, recap_sent_open, recap_sent_close
     
-    # Evening scan at 18:00 (after market closes)
-    if is_evening_scan_time():
-        logger.info("Evening scan time! Running full recap...")
+    # Reset recap flags at midnight
+    from datetime import datetime
+    import pytz
+    WIB = pytz.timezone('Asia/Jakarta')
+    now = datetime.now(WIB)
+    if now.hour == 0 and now.minute <= 5:
+        recap_sent_open = False
+        recap_sent_close = False
+    
+    # Market Open Recap (08:50) — full overview, sent ONCE
+    if is_market_open_time() and not recap_sent_open:
+        logger.info("Market open time! Running opening recap...")
         try:
-            run_evening_scan(state_manager)
+            run_full_recap(state_manager, recap_type="OPENING")
+            recap_sent_open = True
         except Exception as e:
-            logger.error(f"Error during evening scan: {str(e)}")
-            send_telegram_message(f"⚠️ Evening Scan Error: {str(e)}")
+            logger.error(f"Error during opening recap: {str(e)}")
+            send_telegram_message(f"⚠️ Opening Recap Error: {str(e)}")
         return
     
+    # Market Close Recap (16:15) — full overview + daily summary, sent ONCE
+    if is_market_close_time() and not recap_sent_close:
+        logger.info("Market close time! Running closing recap...")
+        try:
+            run_full_recap(state_manager, recap_type="CLOSING")
+            recap_sent_close = True
+        except Exception as e:
+            logger.error(f"Error during closing recap: {str(e)}")
+            send_telegram_message(f"⚠️ Closing Recap Error: {str(e)}")
+        return
+    
+    # Outside trading hours — skip
     if not is_trading_hours():
         logger.info("Outside trading hours. Waiting...")
         return
     
+    # Regular scan during trading hours — only sends NEW signals
     try:
-        # Check if it's end of trading (16:00) - send recap instead
-        if is_end_of_trading():
-            logger.info("End of trading session. Sending daily recap...")
-            send_end_of_day_recap(state_manager)
-        else:
-            run_scan(state_manager, force=False)
+        run_scan(state_manager, force=False)
     except Exception as e:
         logger.error(f"Error during scheduled scan: {str(e)}")
         send_telegram_message(f"⚠️ Scanner Error: {str(e)}")
@@ -67,13 +89,14 @@ def main():
     os.makedirs('logs', exist_ok=True)
     os.makedirs('database', exist_ok=True)
     
-    logger.info("="*50)
-    logger.info("IHSG SUPERTREND SCANNER - SCHEDULER")
-    logger.info("="*50)
+    logger.info("=" * 50)
+    logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER")
+    logger.info("=" * 50)
     logger.info("Scan interval: 1 minute")
-    logger.info("Evening scan: 18:00 WIB")
+    logger.info("Opening recap: 08:50 WIB")
+    logger.info("Closing recap: 16:15 WIB")
     logger.info("Trading hours: 08:50 - 16:15 WIB")
-    logger.info("="*50)
+    logger.info("=" * 50)
     
     # Initialize state manager
     state_manager = StateManager()
@@ -81,12 +104,7 @@ def main():
     # Send startup notification
     send_startup_message()
     
-    # Run initial scan
-    logger.info("Running initial scan...")
-    run_scan(state_manager, force=True)
-    
     # Schedule scans every 1 minute
-    # Run at :00, :01, :02, ... :59
     for minute in range(0, 60, 1):
         schedule.every().hour.at(f":{minute:02d}").do(scheduled_scan)
     
@@ -103,7 +121,7 @@ def main():
             break
         except Exception as e:
             logger.error(f"Scheduler error: {str(e)}")
-            time.sleep(60)  # Wait 1 minute before retrying
+            time.sleep(60)
 
 
 if __name__ == "__main__":

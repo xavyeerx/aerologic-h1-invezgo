@@ -19,8 +19,6 @@ from database.state_manager import StateManager
 from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_morning_recap_message
 
 # Setup logging
-# Ensure directories exist BEFORE setting up file handlers
-import os
 os.makedirs('logs', exist_ok=True)
 os.makedirs('database', exist_ok=True)
 
@@ -43,7 +41,7 @@ def is_trading_hours() -> bool:
     now = datetime.now(WIB)
     
     # Skip weekends
-    if now.weekday() >= 5:  # Saturday = 5, Sunday = 6
+    if now.weekday() >= 5:
         return False
     
     # Check trading hours (08:50 - 16:15 WIB)
@@ -54,21 +52,22 @@ def is_trading_hours() -> bool:
     return start_time <= current_time <= end_time
 
 
-def is_evening_scan_time() -> bool:
-    """Check if current time is evening scan time (18:00)"""
+def is_market_open_time() -> bool:
+    """Check if current time is market open time (08:50) — for opening recap"""
     now = datetime.now(WIB)
-    return now.hour == 18 and now.minute <= 5
+    return now.hour == TRADING_START_HOUR and now.minute == TRADING_START_MINUTE
 
 
-def is_end_of_trading() -> bool:
-    """Check if current time is end of trading session (16:00)"""
+def is_market_close_time() -> bool:
+    """Check if current time is market close time (16:15) — for closing recap"""
     now = datetime.now(WIB)
-    return now.hour == TRADING_END_HOUR and now.minute <= 5
+    return now.hour == TRADING_END_HOUR and now.minute >= TRADING_END_MINUTE and now.minute <= TRADING_END_MINUTE + 5
 
 
 def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     """
-    Run a single scan cycle
+    Run a single scan cycle.
+    Only sends alerts for NEW signals that haven't been alerted today.
     
     Args:
         state_manager: StateManager instance
@@ -82,9 +81,9 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         logger.info("Outside trading hours. Skipping scan.")
         return {'skipped': True, 'reason': 'Outside trading hours'}
     
-    logger.info("="*50)
+    logger.info("=" * 50)
     logger.info("Starting IHSG Supertrend Scan")
-    logger.info("="*50)
+    logger.info("=" * 50)
     
     # Get stock list
     stocks = get_all_stocks()
@@ -122,7 +121,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         if len(signal_list) > 0:
             logger.info(f"  {signal_type}: {len(signal_list)} total, {len(new_only)} new")
     
-    # Send alerts for NEW signals only
+    # Send alerts for NEW signals only (skip if nothing new)
     if has_any_signal(new_signals):
         logger.info("Sending Telegram alerts for NEW signals...")
         messages_sent = send_all_alerts(new_signals)
@@ -153,14 +152,74 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     
     logger.info("Scan complete!")
     logger.info(f"Summary: {summary}")
-    logger.info("="*50)
+    logger.info("=" * 50)
     
     return summary
 
 
+def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
+    """
+    Run a full recap scan at market open (08:50) or close (16:15).
+    This scans ALL stocks and sends a comprehensive overview.
+    No duplicate check here — this is a full overview, sent only once.
+    """
+    logger.info("=" * 50)
+    logger.info(f"{recap_type} RECAP SCAN")
+    logger.info("=" * 50)
+    
+    # Get stock list
+    stocks = get_all_stocks()
+    logger.info(f"Recap scan: {len(stocks)} stocks...")
+    
+    # Fetch data
+    logger.info("Fetching data from Yahoo Finance...")
+    stock_data = fetch_multiple_stocks(stocks, period=DATA_PERIOD, interval=DATA_INTERVAL)
+    logger.info(f"Fetched data for {len(stock_data)} stocks")
+    
+    if len(stock_data) == 0:
+        logger.error("No data fetched. Aborting recap scan.")
+        return
+    
+    # Get previous states
+    previous_states = state_manager.get_all_states()
+    
+    # Scan all stocks
+    logger.info("Analyzing stocks for recap...")
+    results = scan_all_stocks(stock_data, previous_states)
+    
+    # Get ALL current matching signals (not filtering for new-only)
+    all_current_signals = filter_all_current_signals(results)
+    
+    # Count total signals
+    total_signals = sum(len(v) for v in all_current_signals.values())
+    
+    if total_signals == 0:
+        logger.info("No matching signals found in recap scan.")
+        return
+    
+    # Send recap message
+    logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
+    send_morning_recap_message(all_current_signals)
+    
+    # If it's market close, also send daily summary
+    if recap_type == "CLOSING":
+        daily_summary = state_manager.get_daily_summary()
+        total_daily = sum(len(v) for k, v in daily_summary.items() if k != 'date')
+        if total_daily > 0:
+            send_daily_recap_message(daily_summary)
+    
+    # Update states
+    logger.info("Updating stock states...")
+    for ticker, result in results.items():
+        state_manager.update_from_scan_result(result)
+    state_manager.save()
+    
+    logger.info(f"{recap_type} recap complete!")
+    logger.info("=" * 50)
+
+
 def main():
     """Main entry point"""
-    # Ensure logs directory exists
     os.makedirs('logs', exist_ok=True)
     os.makedirs('database', exist_ok=True)
     
@@ -175,7 +234,7 @@ def main():
         logger.info("This is to establish baseline states for all stocks.")
     
     # Run scan
-    run_scan(state_manager, force=True)  # force=True for testing
+    run_scan(state_manager, force=True)
 
 
 def run_with_notification():
@@ -193,87 +252,5 @@ def run_with_notification():
     run_scan(state_manager, force=True)
 
 
-def send_end_of_day_recap(state_manager: StateManager):
-    """
-    Send end-of-day recap with ALL stocks that triggered signals today.
-    This is called at 16:00 (end of trading session).
-    """
-    logger.info("="*50)
-    logger.info("SENDING END-OF-DAY RECAP")
-    logger.info("="*50)
-    
-    # Get all daily signals
-    daily_summary = state_manager.get_daily_summary()
-    
-    # Check if there are any signals at all
-    total_signals = sum(len(v) for k, v in daily_summary.items() if k != 'date')
-    
-    if total_signals == 0:
-        logger.info("No signals detected today. No recap to send.")
-        return
-    
-    # Send recap message
-    logger.info(f"Sending recap with {total_signals} total signals...")
-    send_daily_recap_message(daily_summary)
-    
-    logger.info("End-of-day recap sent!")
-    logger.info("="*50)
-
-
-def run_evening_scan(state_manager: StateManager):
-    """
-    Run evening scan at 18:00 PM.
-    Scans ALL stocks and sends recap of ALL matching signals (not just new).
-    This gives users a complete overview after market closes.
-    """
-    logger.info("="*50)
-    logger.info("EVENING SCAN - 18:00 OVERVIEW")
-    logger.info("="*50)
-    
-    # Get stock list
-    stocks = get_all_stocks()
-    logger.info(f"Morning scan: {len(stocks)} stocks...")
-    
-    # Fetch data
-    logger.info("Fetching data from Yahoo Finance...")
-    stock_data = fetch_multiple_stocks(stocks, period=DATA_PERIOD, interval=DATA_INTERVAL)
-    logger.info(f"Fetched data for {len(stock_data)} stocks")
-    
-    if len(stock_data) == 0:
-        logger.error("No data fetched. Aborting morning scan.")
-        return
-    
-    # Get previous states
-    previous_states = state_manager.get_all_states()
-    
-    # Scan all stocks
-    logger.info("Analyzing stocks for morning recap...")
-    results = scan_all_stocks(stock_data, previous_states)
-    
-    # Get ALL current matching signals (not filtering for new-only)
-    all_current_signals = filter_all_current_signals(results)
-    
-    # Count total signals
-    total_signals = sum(len(v) for v in all_current_signals.values())
-    
-    if total_signals == 0:
-        logger.info("No matching signals found in morning scan.")
-        return
-    
-    # Send morning recap message
-    logger.info(f"Sending morning recap with {total_signals} total signals...")
-    send_morning_recap_message(all_current_signals)
-    
-    # Update states
-    logger.info("Updating stock states...")
-    for ticker, result in results.items():
-        state_manager.update_from_scan_result(result)
-    state_manager.save()
-    
-    logger.info("Morning scan complete!")
-    logger.info("="*50)
-
-
 if __name__ == "__main__":
-    # For testing, use force=True to run outside trading hours
     main()
