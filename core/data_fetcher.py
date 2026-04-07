@@ -68,17 +68,27 @@ def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str
     results = {}
     total = len(tickers)
     
-    for i, ticker in enumerate(tickers):
-        if (i + 1) % 50 == 0:
-            logger.info(f"Fetching progress: {i + 1}/{total}")
-        
-        df = fetch_stock_data(ticker, period, interval)
-        if df is not None and len(df) > 0:
-            results[ticker] = df
-        
-        # Rate limiting
-        time.sleep(delay)
+    import concurrent.futures
     
+    def fetch_single(ticker):
+        # We don't sleep much to keep it fast, but add a tiny delay
+        time.sleep(0.01)
+        return ticker, fetch_stock_data(ticker, period, interval)
+
+    logger.info("Mulai proses fetching multithreading (ngebut)...")
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        future_to_ticker = {executor.submit(fetch_single, t): t for t in tickers}
+        
+        completed = 0
+        for future in concurrent.futures.as_completed(future_to_ticker):
+            completed += 1
+            if completed % 50 == 0 or completed == total:
+                logger.info(f"Fetching progress: {completed}/{total}")
+                
+            ticker, df = future.result()
+            if df is not None and not df.empty:
+                results[ticker] = df
+                
     logger.info(f"Successfully fetched {len(results)}/{total} stocks")
     return results
 
