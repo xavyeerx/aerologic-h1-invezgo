@@ -59,14 +59,16 @@ def send_telegram_message(message: str) -> bool:
 
 
 def _format_tp_info(r) -> str:
-    """Format target price info (TP1 + TP Swing) for a stock"""
+    """Format target price info (TP1 + SL) for a stock"""
     lines = []
     if r.tp1 and r.tp1 > 0:
         tp1_pct = ((r.tp1 - r.price) / r.price) * 100
         lines.append(f"   🎯 TP1: {r.tp1:,.0f} (+{tp1_pct:.1f}%)")
-    if r.tp_swing and r.tp_swing > 0:
-        tps_pct = ((r.tp_swing - r.price) / r.price) * 100
-        lines.append(f"   🏹 TP Swing: {r.tp_swing:,.0f} (+{tps_pct:.1f}%)")
+    
+    # Tambah SL 5% dari harga terkini
+    sl_price = r.price * 0.95
+    lines.append(f"   🛑 SL: {sl_price:,.0f} (-5.0%)")
+    
     return "\n".join(lines)
 
 
@@ -348,7 +350,8 @@ def send_morning_recap_message(signals: dict):
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
             if r.tp1 and r.tp1 > 0:
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
+                sl_price = r.price * 0.95
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(strong_buy)
@@ -361,7 +364,8 @@ def send_morning_recap_message(signals: dict):
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
             if r.tp1 and r.tp1 > 0:
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
+                sl_price = r.price * 0.95
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(acc)
@@ -384,7 +388,8 @@ def send_morning_recap_message(signals: dict):
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Koreksi: {r.correction_percent:.1f}%")
             if r.tp1 and r.tp1 > 0:
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
+                sl_price = r.price * 0.95
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(early)
@@ -397,7 +402,8 @@ def send_morning_recap_message(signals: dict):
             ticker_clean = r.ticker.replace('.JK', '')
             section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
             if r.tp1 and r.tp1 > 0:
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🏹 Swing: {r.tp_swing:,.0f}")
+                sl_price = r.price * 0.95
+                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(div)
