@@ -1,6 +1,8 @@
 # ============================================
-# DATA FETCHER - YAHOO FINANCE
+# DATA FETCHER - YAHOO FINANCE (v5.1)
 # ============================================
+# Uses yf.download() batch mode to avoid rate limiting.
+# 657 tickers -> ~13 batch calls instead of 657 individual requests.
 
 import yfinance as yf
 import pandas as pd
@@ -10,85 +12,114 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+BATCH_SIZE = 50
+BATCH_DELAY = 1.0
+MAX_RETRIES = 3
+
 
 def fetch_stock_data(ticker: str, period: str = "60d", interval: str = "15m") -> Optional[pd.DataFrame]:
-    """
-    Fetch stock data from Yahoo Finance
-    
-    Args:
-        ticker: Stock ticker (e.g., 'BBCA.JK')
-        period: Data period (e.g., '60d', '1mo')
-        interval: Candlestick interval (e.g., '15m', '1h', '1d')
-    
-    Returns:
-        DataFrame with OHLCV data or None if error
-    """
+    """Fetch single stock data (fallback / utility)."""
     try:
         stock = yf.Ticker(ticker)
         df = stock.history(period=period, interval=interval)
-        
+
         if df.empty:
-            logger.warning(f"No data for {ticker}")
             return None
-        
-        # Standardize column names to lowercase
+
         df.columns = df.columns.str.lower()
-        
-        # Ensure required columns exist
         required_cols = ['open', 'high', 'low', 'close', 'volume']
         if not all(col in df.columns for col in required_cols):
-            logger.warning(f"Missing columns for {ticker}")
             return None
-        
-        # Remove timezone info if present
+
         if df.index.tz is not None:
             df.index = df.index.tz_localize(None)
-        
+
         return df
-        
+
     except Exception as e:
         logger.error(f"Error fetching {ticker}: {str(e)}")
         return None
 
 
-def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str = "15m", 
+def _download_batch(tickers: List[str], period: str, interval: str, attempt: int = 1) -> dict:
+    """Download a batch of tickers using yf.download (single API call)."""
+    results = {}
+    try:
+        data = yf.download(
+            tickers=tickers,
+            period=period,
+            interval=interval,
+            group_by='ticker',
+            threads=True,
+            progress=False,
+        )
+
+        if data is None or data.empty:
+            return results
+
+        if len(tickers) == 1:
+            ticker = tickers[0]
+            df = data.copy()
+            df.columns = df.columns.str.lower()
+            if df.index.tz is not None:
+                df.index = df.index.tz_localize(None)
+            df = df.dropna(subset=['close'])
+            if not df.empty:
+                results[ticker] = df
+        else:
+            for ticker in tickers:
+                try:
+                    if ticker not in data.columns.get_level_values(0):
+                        continue
+                    df = data[ticker].copy()
+                    df.columns = df.columns.str.lower()
+                    if df.index.tz is not None:
+                        df.index = df.index.tz_localize(None)
+                    df = df.dropna(subset=['close'])
+                    if not df.empty and len(df) > 0:
+                        results[ticker] = df
+                except Exception:
+                    pass
+
+    except Exception as e:
+        err_msg = str(e)
+        if 'Rate' in err_msg or 'Too Many' in err_msg or '429' in err_msg:
+            if attempt < MAX_RETRIES:
+                wait = BATCH_DELAY * (2 ** attempt)
+                logger.warning(f"Rate limited on batch (attempt {attempt}), waiting {wait:.0f}s...")
+                time.sleep(wait)
+                return _download_batch(tickers, period, interval, attempt + 1)
+        logger.error(f"Batch download error: {err_msg}")
+
+    return results
+
+
+def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str = "15m",
                           delay: float = 0.1) -> dict:
     """
-    Fetch data for multiple stocks with rate limiting
-    
-    Args:
-        tickers: List of stock tickers
-        period: Data period
-        interval: Candlestick interval
-        delay: Delay between requests (seconds)
-    
-    Returns:
-        Dictionary of {ticker: DataFrame}
+    Fetch data for multiple stocks using batch download.
+    Splits tickers into chunks processed via yf.download() to avoid rate limiting.
     """
     results = {}
     total = len(tickers)
-    
-    import concurrent.futures
-    
-    def fetch_single(ticker):
-        # We don't sleep much to keep it fast, but add a tiny delay
-        time.sleep(0.01)
-        return ticker, fetch_stock_data(ticker, period, interval)
 
-    logger.info("Mulai proses fetching multithreading (ngebut)...")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_ticker = {executor.submit(fetch_single, t): t for t in tickers}
-        
-        completed = 0
-        for future in concurrent.futures.as_completed(future_to_ticker):
-            completed += 1
-            if completed % 50 == 0 or completed == total:
-                logger.info(f"Fetching progress: {completed}/{total}")
-                
-            ticker, df = future.result()
-            if df is not None and not df.empty:
-                results[ticker] = df
-                
+    chunks = [tickers[i:i + BATCH_SIZE] for i in range(0, total, BATCH_SIZE)]
+    total_chunks = len(chunks)
+
+    logger.info(f"Batch download: {total} tickers in {total_chunks} chunks of {BATCH_SIZE}")
+
+    for idx, chunk in enumerate(chunks):
+        batch_results = _download_batch(chunk, period, interval)
+        results.update(batch_results)
+
+        fetched_so_far = len(results)
+        logger.info(f"Chunk {idx + 1}/{total_chunks} done | "
+                     f"Got {len(batch_results)}/{len(chunk)} | "
+                     f"Total: {fetched_so_far}/{total}")
+
+        if idx < total_chunks - 1:
+            time.sleep(BATCH_DELAY)
+
     logger.info(f"Successfully fetched {len(results)}/{total} stocks")
     return results
 
