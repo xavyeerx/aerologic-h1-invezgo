@@ -297,19 +297,74 @@ nearResistance = not na(resistance) and close >= resistance * 0.98
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-// Bullish divergence: price makes lower low, RSI makes higher low
-priceLow1 = ta.lowest(low, 5)
-priceLow2 = ta.lowest(low[5], 5)
-rsiLow1 = ta.lowest(rsi, 5)
-rsiLow2 = ta.lowest(rsi[5], 5)
-bullishDivergence = priceLow1 < priceLow2 and rsiLow1 > rsiLow2
+// v5.1 Enhanced: Pivot-based divergence with multi-layer confirmation
+// Python scanner uses full pivot detection + volume/candle/MACD confirmation
+// Pine simplified version below keeps visual alignment with Python logic
 
-// Bearish divergence: price makes higher high, RSI makes lower high
-priceHigh1 = ta.highest(high, 5)
-priceHigh2 = ta.highest(high[5], 5)
-rsiHigh1 = ta.highest(rsi, 5)
-rsiHigh2 = ta.highest(rsi[5], 5)
-bearishDivergence = priceHigh1 > priceHigh2 and rsiHigh1 < rsiHigh2
+divPivotLB   = input.int(5,  "Div Pivot Lookback",  group="Divergence")
+divRsiOS     = input.int(30, "Div RSI Oversold",     group="Divergence")
+divRsiDiff   = input.int(3,  "Div RSI Min Diff",     group="Divergence")
+divPriceDrop = input.float(1.0, "Div Min Price Drop %", group="Divergence")
+divStochMax  = input.int(70, "Div Max Stoch K",      group="Divergence")
+
+pl = ta.pivotlow(low, divPivotLB, divPivotLB)
+ph = ta.pivothigh(high, divPivotLB, divPivotLB)
+
+// Track last two pivot lows
+var float prevPivotLowPrice = na
+var float prevPivotLowRsi   = na
+var float prevPivotLowVol   = na
+var int   prevPivotLowBar   = na
+
+var float currPivotLowPrice = na
+var float currPivotLowRsi   = na
+var float currPivotLowVol   = na
+var int   currPivotLowBar   = na
+
+if not na(pl)
+    prevPivotLowPrice := currPivotLowPrice
+    prevPivotLowRsi   := currPivotLowRsi
+    prevPivotLowVol   := currPivotLowVol
+    prevPivotLowBar   := currPivotLowBar
+    currPivotLowPrice := low[divPivotLB]
+    currPivotLowRsi   := rsi[divPivotLB]
+    currPivotLowVol   := volume[divPivotLB]
+    currPivotLowBar   := bar_index - divPivotLB
+
+separation = not na(currPivotLowBar) and not na(prevPivotLowBar) ? currPivotLowBar - prevPivotLowBar : 0
+priceLowerLow = not na(currPivotLowPrice) and not na(prevPivotLowPrice) and currPivotLowPrice < prevPivotLowPrice
+priceDropPct  = not na(prevPivotLowPrice) and prevPivotLowPrice > 0 ? (prevPivotLowPrice - currPivotLowPrice) / prevPivotLowPrice * 100 : 0
+rsiHigherLow  = not na(currPivotLowRsi) and not na(prevPivotLowRsi) and currPivotLowRsi > prevPivotLowRsi + divRsiDiff
+rsiWasOversold = not na(prevPivotLowRsi) and prevPivotLowRsi < divRsiOS
+volDecline    = not na(currPivotLowVol) and not na(prevPivotLowVol) and prevPivotLowVol > 0 and currPivotLowVol < prevPivotLowVol * 0.85
+stochOK       = stochK <= divStochMax
+freshEnough   = not na(currPivotLowBar) and (bar_index - currPivotLowBar) <= 3
+
+bullishDivergence = priceLowerLow and priceDropPct >= divPriceDrop and rsiHigherLow and rsiWasOversold and volDecline and stochOK and freshEnough and separation >= 8 and separation <= 60
+
+// Track last two pivot highs for bearish divergence
+var float prevPivotHighPrice = na
+var float prevPivotHighRsi   = na
+var int   prevPivotHighBar   = na
+
+var float currPivotHighPrice = na
+var float currPivotHighRsi   = na
+var int   currPivotHighBar   = na
+
+if not na(ph)
+    prevPivotHighPrice := currPivotHighPrice
+    prevPivotHighRsi   := currPivotHighRsi
+    prevPivotHighBar   := currPivotHighBar
+    currPivotHighPrice := high[divPivotLB]
+    currPivotHighRsi   := rsi[divPivotLB]
+    currPivotHighBar   := bar_index - divPivotLB
+
+sepHigh = not na(currPivotHighBar) and not na(prevPivotHighBar) ? currPivotHighBar - prevPivotHighBar : 0
+priceHigherHigh = not na(currPivotHighPrice) and not na(prevPivotHighPrice) and currPivotHighPrice > prevPivotHighPrice
+rsiLowerHigh    = not na(currPivotHighRsi) and not na(prevPivotHighRsi) and currPivotHighRsi < prevPivotHighRsi
+freshHighEnough = not na(currPivotHighBar) and (bar_index - currPivotHighBar) <= 3
+
+bearishDivergence = priceHigherHigh and rsiLowerHigh and freshHighEnough and sepHigh >= 8 and sepHigh <= 60
 
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -293,28 +293,182 @@ def calculate_support_resistance(df: pd.DataFrame, lookback: int = PIVOT_LOOKBAC
     return df
 
 
+def _find_pivot_lows(df: pd.DataFrame, lookback: int = DIV_PIVOT_LOOKBACK) -> pd.Series:
+    """Find swing lows: bar where low is the lowest within lookback bars on each side."""
+    pivot = df['low'].rolling(window=lookback * 2 + 1, center=True).apply(
+        lambda x: x.iloc[lookback] if x.iloc[lookback] == x.min() else np.nan, raw=False
+    )
+    return pivot
+
+
+def _find_pivot_highs(df: pd.DataFrame, lookback: int = DIV_PIVOT_LOOKBACK) -> pd.Series:
+    """Find swing highs: bar where high is the highest within lookback bars on each side."""
+    pivot = df['high'].rolling(window=lookback * 2 + 1, center=True).apply(
+        lambda x: x.iloc[lookback] if x.iloc[lookback] == x.max() else np.nan, raw=False
+    )
+    return pivot
+
+
 def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
-    """Detect RSI/Price divergence — NEW in v5"""
-    df = df.copy()
+    """
+    Detect RSI/Price divergence using pivot-based detection (v5.1 Enhanced).
     
+    Bullish divergence criteria (all must be met):
+      1. Two confirmed pivot lows separated by DIV_MIN_SEPARATION..DIV_MAX_SEPARATION bars
+      2. Price: second pivot low < first pivot low (lower low) by >= DIV_PRICE_MIN_DROP %
+      3. RSI: second pivot RSI > first pivot RSI + DIV_RSI_MIN_DIFF (higher low)
+      4. First pivot RSI was in oversold territory (< DIV_RSI_OVERSOLD)
+      5. Freshness: second pivot must be within DIV_FRESHNESS_BARS of the current bar
+      6. Stoch K on signal bar <= DIV_STOCH_MAX_K (not already overbought)
+      7. Volume at second low <= DIV_VOLUME_DECLINE_RATIO × volume at first low (selling exhaustion)
+    
+    Strength scoring (0-5):
+      +1 confirmed by bullish candlestick pattern
+      +1 MACD histogram rising at second low
+      +1 volume declining significantly (< 0.6× first low)
+      +1 OBV bullish
+      +1 near support level
+    """
+    df = df.copy()
+
     if 'rsi' not in df.columns:
         df = calculate_rsi(df)
-    
-    # Bullish divergence: price makes lower low, RSI makes higher low
-    # Strict conditions: RSI was oversold (< 35), and RSI makes a clear higher low (+3 points)
-    price_low1 = df['low'].rolling(window=5).min()
-    price_low2 = df['low'].shift(5).rolling(window=5).min()
-    rsi_low1 = df['rsi'].rolling(window=5).min()
-    rsi_low2 = df['rsi'].shift(5).rolling(window=5).min()
-    df['bullish_divergence'] = (price_low1 < price_low2) & (rsi_low1 > rsi_low2 + 3) & (rsi_low2 < 35)
-    
-    # Bearish divergence: price makes higher high, RSI makes lower high
-    price_high1 = df['high'].rolling(window=5).max()
-    price_high2 = df['high'].shift(5).rolling(window=5).max()
-    rsi_high1 = df['rsi'].rolling(window=5).max()
-    rsi_high2 = df['rsi'].shift(5).rolling(window=5).max()
-    df['bearish_divergence'] = (price_high1 > price_high2) & (rsi_high1 < rsi_high2)
-    
+
+    n = len(df)
+    bull_div = np.zeros(n, dtype=bool)
+    bear_div = np.zeros(n, dtype=bool)
+    div_strength = np.zeros(n, dtype=int)
+
+    pivot_lows = _find_pivot_lows(df)
+    pivot_highs = _find_pivot_highs(df)
+
+    pivot_low_indices = pivot_lows.dropna().index.tolist()
+    pivot_high_indices = pivot_highs.dropna().index.tolist()
+
+    has_stoch = 'stoch_k' in df.columns
+    has_macd = 'macd_hist' in df.columns and 'macd_hist_rising' in df.columns
+    has_volume = 'volume' in df.columns
+    has_pattern = 'bullish_pattern' in df.columns
+    has_obv = 'obv_bullish' in df.columns
+    has_support = 'near_support' in df.columns
+
+    # Effective freshness window accounts for pivot confirmation delay
+    max_freshness = DIV_PIVOT_LOOKBACK + DIV_FRESHNESS_BARS
+
+    # --- BULLISH DIVERGENCE ---
+    best_bull_strength = 0
+    found_bull_div = False
+
+    for i in range(1, len(pivot_low_indices)):
+        idx2 = pivot_low_indices[i]   # second (more recent) pivot low
+        idx1 = pivot_low_indices[i-1] # first (earlier) pivot low
+
+        pos2 = df.index.get_loc(idx2)
+        pos1 = df.index.get_loc(idx1)
+        separation = pos2 - pos1
+
+        if separation < DIV_MIN_SEPARATION or separation > DIV_MAX_SEPARATION:
+            continue
+
+        price1 = df.loc[idx1, 'low']
+        price2 = df.loc[idx2, 'low']
+        rsi1 = df.loc[idx1, 'rsi']
+        rsi2 = df.loc[idx2, 'rsi']
+
+        if pd.isna(rsi1) or pd.isna(rsi2):
+            continue
+
+        price_drop_pct = ((price1 - price2) / price1) * 100
+
+        if price2 >= price1:
+            continue
+        if price_drop_pct < DIV_PRICE_MIN_DROP:
+            continue
+        if rsi2 <= rsi1 + DIV_RSI_MIN_DIFF:
+            continue
+        if rsi1 >= DIV_RSI_OVERSOLD:
+            continue
+
+        freshness = (n - 1) - pos2
+        if freshness > max_freshness:
+            continue
+
+        if has_stoch:
+            stoch_k_val = df.iloc[-1].get('stoch_k', 50.0)
+            if stoch_k_val > DIV_STOCH_MAX_K:
+                continue
+
+        if has_volume:
+            vol1 = df.loc[idx1, 'volume']
+            vol2 = df.loc[idx2, 'volume']
+            if vol1 > 0 and vol2 > vol1 * DIV_VOLUME_DECLINE_RATIO:
+                continue
+
+        strength = 0
+        if has_pattern and df.loc[idx2, 'bullish_pattern']:
+            strength += 1
+        if has_macd and df.iloc[min(pos2 + 1, n - 1)].get('macd_hist_rising', False):
+            strength += 1
+        if has_volume and vol1 > 0 and vol2 < vol1 * 0.6:
+            strength += 1
+        if has_obv and df.iloc[-1].get('obv_bullish', False):
+            strength += 1
+        if has_support and df.loc[idx2, 'near_support']:
+            strength += 1
+
+        bull_div[pos2] = True
+        div_strength[pos2] = strength
+
+        if strength > best_bull_strength:
+            best_bull_strength = strength
+        found_bull_div = True
+
+    # Propagate the best divergence signal to the latest bar so the scanner picks it up
+    if found_bull_div:
+        bull_div[-1] = True
+        div_strength[-1] = best_bull_strength
+
+    # --- BEARISH DIVERGENCE (also enhanced with pivots) ---
+    found_bear_div = False
+
+    for i in range(1, len(pivot_high_indices)):
+        idx2 = pivot_high_indices[i]
+        idx1 = pivot_high_indices[i-1]
+
+        pos2 = df.index.get_loc(idx2)
+        pos1 = df.index.get_loc(idx1)
+        separation = pos2 - pos1
+
+        if separation < DIV_MIN_SEPARATION or separation > DIV_MAX_SEPARATION:
+            continue
+
+        price1 = df.loc[idx1, 'high']
+        price2 = df.loc[idx2, 'high']
+        rsi1 = df.loc[idx1, 'rsi']
+        rsi2 = df.loc[idx2, 'rsi']
+
+        if pd.isna(rsi1) or pd.isna(rsi2):
+            continue
+
+        if price2 <= price1:
+            continue
+        if rsi2 >= rsi1:
+            continue
+
+        freshness = (n - 1) - pos2
+        if freshness > max_freshness:
+            continue
+
+        bear_div[pos2] = True
+        found_bear_div = True
+
+    if found_bear_div:
+        bear_div[-1] = True
+
+    df['bullish_divergence'] = bull_div
+    df['bearish_divergence'] = bear_div
+    df['div_strength'] = div_strength
+
     return df
 
 

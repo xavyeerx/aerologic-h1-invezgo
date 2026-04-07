@@ -32,6 +32,8 @@ class ScanResult:
         self.is_accumulation = False
         self.is_early_entry = False
         self.is_bull_div = False           # NEW v5: bullish divergence
+        self.div_strength = 0              # v5.1: 0-5 strength score
+        self.div_grade = ""                # v5.1: "STRONG" / "MODERATE" / ""
         
         # Target prices
         self.tp1 = 0.0              # Quick target (1×ATR)
@@ -192,9 +194,16 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         if is_bullish_trend and acc_has_momentum and acc_has_volume and result.score >= ACCUMULATE_THRESHOLD and is_not_sideways:
             result.is_accumulation = True
         
-        # 3. BULLISH DIVERGENCE Signal (NEW)
+        # 3. BULLISH DIVERGENCE Signal (v5.1 Enhanced)
         if latest.get('bullish_divergence', False) and not is_bullish_trend:
-            result.is_bull_div = True
+            strength = int(latest.get('div_strength', 0))
+            result.div_strength = strength
+            if strength >= 3:
+                result.div_grade = "STRONG"
+                result.is_bull_div = True
+            elif strength >= 1:
+                result.div_grade = "MODERATE"
+                result.is_bull_div = True
         
         # 4. EARLY ENTRY (Serok Bawah)
         if len(df) >= 2:
