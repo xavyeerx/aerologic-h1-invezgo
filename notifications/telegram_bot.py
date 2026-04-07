@@ -138,6 +138,7 @@ def format_bull_div_message(results: List) -> str:
 
     strong = [r for r in results if getattr(r, 'div_grade', '') == 'STRONG']
     moderate = [r for r in results if getattr(r, 'div_grade', '') == 'MODERATE']
+    weak = [r for r in results if getattr(r, 'div_grade', '') == 'WEAK']
 
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
@@ -148,34 +149,43 @@ def format_bull_div_message(results: List) -> str:
     ]
 
     if strong:
-        lines.append("🔥 <b>STRONG DIVERGENCE</b>")
+        lines.append("🔥 <b>STRONG</b>")
         for r in strong:
             ticker_clean = r.ticker.replace('.JK', '')
             change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
             strength = getattr(r, 'div_strength', 0)
             lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/5")
+            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
             tp_info = _format_tp_info(r)
             if tp_info:
                 lines.append(tp_info)
             lines.append("")
 
     if moderate:
-        lines.append("📊 <b>MODERATE DIVERGENCE</b>")
+        lines.append("📊 <b>MODERATE</b>")
         for r in moderate:
             ticker_clean = r.ticker.replace('.JK', '')
             change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
             strength = getattr(r, 'div_strength', 0)
             lines.append(f"🟡 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/5")
+            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
             tp_info = _format_tp_info(r)
             if tp_info:
                 lines.append(tp_info)
             lines.append("")
 
+    if weak:
+        lines.append("⚪ <b>WEAK</b>")
+        for r in weak:
+            ticker_clean = r.ticker.replace('.JK', '')
+            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
+            lines.append(f"⚪ {ticker_clean} | {r.price:,.0f} ({change_str})")
+            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f}")
+            lines.append("")
+
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("💡 <i>Pivot low + RSI higher low + vol decline + konfirmasi candle</i>")
-    lines.append(f"Total: {len(results)} saham ({len(strong)} strong, {len(moderate)} moderate)")
+    lines.append("💡 <i>Pivot low + RSI higher low = potensi reversal</i>")
+    lines.append(f"Total: {len(results)} ({len(strong)} strong, {len(moderate)} moderate, {len(weak)} weak)")
 
     return "\n".join(lines)
 

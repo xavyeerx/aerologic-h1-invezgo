@@ -200,10 +200,11 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
             result.div_strength = strength
             if strength >= 3:
                 result.div_grade = "STRONG"
-                result.is_bull_div = True
             elif strength >= 1:
                 result.div_grade = "MODERATE"
-                result.is_bull_div = True
+            else:
+                result.div_grade = "WEAK"
+            result.is_bull_div = True
         
         # 4. EARLY ENTRY (Serok Bawah)
         if len(df) >= 2:

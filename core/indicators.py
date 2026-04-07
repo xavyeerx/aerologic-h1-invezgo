@@ -322,10 +322,11 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
       6. Stoch K on signal bar <= DIV_STOCH_MAX_K (not already overbought)
       7. Volume at second low <= DIV_VOLUME_DECLINE_RATIO × volume at first low (selling exhaustion)
     
-    Strength scoring (0-5):
+    Strength scoring (0-6):
+      +1 volume declining at second low (< 0.85× first low = selling exhaustion)
+      +1 volume declining significantly (< 0.6× first low)
       +1 confirmed by bullish candlestick pattern
       +1 MACD histogram rising at second low
-      +1 volume declining significantly (< 0.6× first low)
       +1 OBV bullish
       +1 near support level
     """
@@ -398,18 +399,17 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
             if stoch_k_val > DIV_STOCH_MAX_K:
                 continue
 
-        if has_volume:
-            vol1 = df.loc[idx1, 'volume']
-            vol2 = df.loc[idx2, 'volume']
-            if vol1 > 0 and vol2 > vol1 * DIV_VOLUME_DECLINE_RATIO:
-                continue
+        vol1 = df.loc[idx1, 'volume'] if has_volume else 0
+        vol2 = df.loc[idx2, 'volume'] if has_volume else 0
 
         strength = 0
+        if has_volume and vol1 > 0 and vol2 < vol1 * 0.85:
+            strength += 1
+        if has_volume and vol1 > 0 and vol2 < vol1 * 0.6:
+            strength += 1
         if has_pattern and df.loc[idx2, 'bullish_pattern']:
             strength += 1
         if has_macd and df.iloc[min(pos2 + 1, n - 1)].get('macd_hist_rising', False):
-            strength += 1
-        if has_volume and vol1 > 0 and vol2 < vol1 * 0.6:
             strength += 1
         if has_obv and df.iloc[-1].get('obv_bullish', False):
             strength += 1

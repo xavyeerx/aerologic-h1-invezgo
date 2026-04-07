@@ -86,12 +86,12 @@ TRADING_END_MINUTE = 0
 DIV_PIVOT_LOOKBACK = 5          # Bars each side to confirm a swing low/high
 DIV_MIN_SEPARATION = 8          # Min bars between two pivot lows
 DIV_MAX_SEPARATION = 60         # Max bars between two pivot lows
-DIV_RSI_OVERSOLD = 30           # RSI must be below this at first low
-DIV_RSI_MIN_DIFF = 3            # Min RSI difference (higher low) for bullish div
-DIV_PRICE_MIN_DROP = 1.0        # Min % price lower low to count as meaningful
-DIV_STOCH_MAX_K = 70            # Max Stoch K on signal bar (reject overbought)
-DIV_VOLUME_DECLINE_RATIO = 0.85 # Volume at low2 must be < this × volume at low1
-DIV_FRESHNESS_BARS = 3          # Extra bars beyond pivot lookback (effective = PIVOT_LOOKBACK + this)
+DIV_RSI_OVERSOLD = 40           # RSI must be below this at first low (EM market oversold zone)
+DIV_RSI_MIN_DIFF = 2            # Min RSI difference (higher low) for bullish div
+DIV_PRICE_MIN_DROP = 0.5        # Min % price lower low to count as meaningful
+DIV_STOCH_MAX_K = 85            # Max Stoch K on signal bar (reject extreme overbought only)
+DIV_FRESHNESS_BARS = 10         # Extra bars beyond pivot lookback (effective = PIVOT_LOOKBACK + this)
+DIV_VOLUME_DECLINE_RATIO = 1.5  # Volume filter relaxed as hard gate, used more for strength scoring
 
 # === LOGIC SETTINGS ===
 MIN_DAILY_TURNOVER = 5_000_000_000  # 5 Miliar (Billion) IDR
