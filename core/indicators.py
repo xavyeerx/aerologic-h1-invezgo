@@ -301,11 +301,12 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
         df = calculate_rsi(df)
     
     # Bullish divergence: price makes lower low, RSI makes higher low
+    # Strict conditions: RSI was oversold (< 35), and RSI makes a clear higher low (+3 points)
     price_low1 = df['low'].rolling(window=5).min()
     price_low2 = df['low'].shift(5).rolling(window=5).min()
     rsi_low1 = df['rsi'].rolling(window=5).min()
     rsi_low2 = df['rsi'].shift(5).rolling(window=5).min()
-    df['bullish_divergence'] = (price_low1 < price_low2) & (rsi_low1 > rsi_low2)
+    df['bullish_divergence'] = (price_low1 < price_low2) & (rsi_low1 > rsi_low2 + 3) & (rsi_low2 < 35)
     
     # Bearish divergence: price makes higher high, RSI makes lower high
     price_high1 = df['high'].rolling(window=5).max()
