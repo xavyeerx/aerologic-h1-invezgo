@@ -44,7 +44,7 @@ def is_trading_hours() -> bool:
     if now.weekday() >= 5:
         return False
     
-    # Check trading hours (08:50 - 16:15 WIB)
+    # Check trading hours (08:45 - 16:00 WIB)
     current_time = now.hour * 100 + now.minute
     start_time = TRADING_START_HOUR * 100 + TRADING_START_MINUTE
     end_time = TRADING_END_HOUR * 100 + TRADING_END_MINUTE
@@ -53,13 +53,13 @@ def is_trading_hours() -> bool:
 
 
 def is_market_open_time() -> bool:
-    """Check if current time is market open time (08:50) — for opening recap"""
+    """Check if current time is market open time (08:45) — for opening recap"""
     now = datetime.now(WIB)
     return now.hour == TRADING_START_HOUR and now.minute == TRADING_START_MINUTE
 
 
 def is_market_close_time() -> bool:
-    """Check if current time is market close time (16:15) — for closing recap"""
+    """Check if current time is market close time (16:00) — for closing recap"""
     now = datetime.now(WIB)
     return now.hour == TRADING_END_HOUR and now.minute >= TRADING_END_MINUTE and now.minute <= TRADING_END_MINUTE + 5
 
@@ -159,7 +159,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
 
 def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     """
-    Run a full recap scan at market open (08:50) or close (16:15).
+    Run a full recap scan at market open (08:45) or close (16:00).
     This scans ALL stocks and sends a comprehensive overview.
     No duplicate check here — this is a full overview, sent only once.
     """
@@ -197,9 +197,9 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
         logger.info("No matching signals found in recap scan.")
         return
     
-    # Send recap message
-    logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
-    send_morning_recap_message(all_current_signals)
+    # (Dihapus/dimatikan sesuai permintaan: hanya gunakan realtime & end of day recap)
+    # logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
+    # send_morning_recap_message(all_current_signals)
     
     # If it's market close, also send daily summary
     if recap_type == "CLOSING":

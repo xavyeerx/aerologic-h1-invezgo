@@ -241,7 +241,7 @@ def send_startup_message():
 
 Scanner is now running.
 Scan interval: setiap 1 menit
-Trading hours: 08:50 - 16:15 WIB
+Trading hours: 08:45 - 16:00 WIB
 
 📊 Alerts:
 • 🚀 Strong Buy (confirmed breakout)
@@ -267,7 +267,7 @@ def send_daily_recap_message(daily_summary: dict):
     """
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "📋 <b>REKAP HARIAN - END OF DAY</b>",
+        "📋 <b>REKAP HARIAN - END OF DAY (opsi BSJP)</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"📅 {daily_summary.get('date', 'N/A')}",
         f"⏰ {get_current_time_wib()}",

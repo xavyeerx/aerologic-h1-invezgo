@@ -1,7 +1,7 @@
 # ============================================
 # SCHEDULER - RUN SCANS
 # ============================================
-# Recap: 08:50 (market open) and 16:15 (market close)
+# Recap: 08:45 (market open) and 16:00 (market close)
 # Alerts: every 1 minute during trading hours (only NEW signals)
 
 import schedule
@@ -46,7 +46,7 @@ def scheduled_scan():
         recap_sent_open = False
         recap_sent_close = False
     
-    # Market Open Recap (08:50) — full overview, sent ONCE
+    # Market Open Recap (08:45) — full overview, sent ONCE
     if is_market_open_time() and not recap_sent_open:
         logger.info("Market open time! Running opening recap...")
         try:
@@ -57,7 +57,7 @@ def scheduled_scan():
             send_telegram_message(f"⚠️ Opening Recap Error: {str(e)}")
         return
     
-    # Market Close Recap (16:15) — full overview + daily summary, sent ONCE
+    # Market Close Recap (16:00) — full overview + daily summary, sent ONCE
     if is_market_close_time() and not recap_sent_close:
         logger.info("Market close time! Running closing recap...")
         try:
@@ -93,9 +93,9 @@ def main():
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER")
     logger.info("=" * 50)
     logger.info("Scan interval: 1 minute")
-    logger.info("Opening recap: 08:50 WIB")
-    logger.info("Closing recap: 16:15 WIB")
-    logger.info("Trading hours: 08:50 - 16:15 WIB")
+    logger.info("Opening recap: 08:45 WIB")
+    logger.info("Closing recap: 16:00 WIB")
+    logger.info("Trading hours: 08:45 - 16:00 WIB")
     logger.info("=" * 50)
     
     # Initialize state manager
