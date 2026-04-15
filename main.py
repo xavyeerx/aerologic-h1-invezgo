@@ -4,7 +4,9 @@
 
 import sys
 import os
+import gc
 import logging
+import logging.handlers
 from datetime import datetime
 import pytz
 
@@ -27,7 +29,12 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('logs/scanner.log', encoding='utf-8')
+        logging.handlers.RotatingFileHandler(
+            'logs/scanner.log',
+            encoding='utf-8',
+            maxBytes=5 * 1024 * 1024,  # 5 MB max per file
+            backupCount=3              # keep last 3 files
+        )
     ]
 )
 logger = logging.getLogger(__name__)
@@ -108,6 +115,10 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     logger.info("Analyzing stocks...")
     results = scan_all_stocks(stock_data, previous_states)
     
+    # ✅ FREE MEMORY: release large DataFrames immediately after scan
+    del stock_data
+    gc.collect()
+    
     # Filter signals
     all_signals = filter_signals(results)
     
@@ -141,8 +152,9 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     state_manager.save()
     
     # Summary
+    stocks_count = len(results)
     summary = {
-        'stocks_scanned': len(stock_data),
+        'stocks_scanned': stocks_count,
         'strong_buys': len(new_signals['strong_buy']),
         'accumulations': len(new_signals['accumulation']),
         'early_entries': len(new_signals['early_entry']),
@@ -186,6 +198,10 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     # Scan all stocks
     logger.info("Analyzing stocks for recap...")
     results = scan_all_stocks(stock_data, previous_states)
+    
+    # ✅ FREE MEMORY: release large DataFrames immediately after scan
+    del stock_data
+    gc.collect()
     
     # Get ALL current matching signals (not filtering for new-only)
     all_current_signals = filter_all_current_signals(results)

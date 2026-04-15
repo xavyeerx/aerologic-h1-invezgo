@@ -7,6 +7,7 @@
 import schedule
 import time
 import logging
+import logging.handlers
 import sys
 import os
 
@@ -22,7 +23,12 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('logs/scheduler.log', encoding='utf-8')
+        logging.handlers.RotatingFileHandler(
+            'logs/scheduler.log',
+            encoding='utf-8',
+            maxBytes=5 * 1024 * 1024,  # 5 MB max
+            backupCount=3
+        )
     ]
 )
 logger = logging.getLogger(__name__)
