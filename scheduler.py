@@ -18,6 +18,15 @@ from main import run_scan, is_trading_hours, is_market_open_time, is_market_clos
 from database.state_manager import StateManager
 from notifications.telegram_bot import send_startup_message, send_telegram_message
 
+# Learning system (graceful degradation)
+try:
+    from main import init_db, _LEARNING_IMPORTS_OK
+    from learning.outcome_checker import run_outcome_check
+    _LEARNING_OK = True
+except ImportError:
+    _LEARNING_OK = False
+    def run_outcome_check(): return 0
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -34,23 +43,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Global state
-state_manager = None
-recap_sent_open = False
-recap_sent_close = False
+state_manager      = None
+recap_sent_open    = False
+recap_sent_close   = False
+outcome_check_done = False   # Outcome check 16:30, reset tiap hari
 
 
 def scheduled_scan():
     """Run scheduled scan"""
-    global state_manager, recap_sent_open, recap_sent_close
-    
-    # Reset recap flags at midnight
+    global state_manager, recap_sent_open, recap_sent_close, outcome_check_done
+
     from datetime import datetime
     import pytz
     WIB = pytz.timezone('Asia/Jakarta')
     now = datetime.now(WIB)
+
+    # Reset flags di tengah malam
     if now.hour == 0 and now.minute <= 5:
-        recap_sent_open = False
-        recap_sent_close = False
+        recap_sent_open    = False
+        recap_sent_close   = False
+        outcome_check_done = False
     
     # Market Open Recap (08:45) — full overview, sent ONCE
     if is_market_open_time() and not recap_sent_open:
@@ -72,6 +84,20 @@ def scheduled_scan():
         except Exception as e:
             logger.error(f"Error during closing recap: {str(e)}")
             send_telegram_message(f"⚠️ Closing Recap Error: {str(e)}")
+        return
+
+    # ── Outcome Check 16:30 WIB ────────────────────────────────
+    # Jalankan 30 menit setelah market close agar data OHLC hari ini final
+    if (now.hour == 16 and now.minute >= 30 and
+            now.weekday() < 5 and not outcome_check_done):
+        logger.info("[OutcomeChecker] Menjalankan evaluasi sinyal (16:30 WIB)...")
+        try:
+            if _LEARNING_OK:
+                n = run_outcome_check()
+                logger.info(f"[OutcomeChecker] Selesai: {n} sinyal dievaluasi")
+            outcome_check_done = True
+        except Exception as e:
+            logger.error(f"[OutcomeChecker] Error: {e}")
         return
     
     # Outside trading hours — skip
@@ -98,11 +124,21 @@ def main():
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER")
     logger.info("=" * 50)
-    logger.info("Scan interval: 1 minute")
-    logger.info("Opening recap: 08:45 WIB")
-    logger.info("Closing recap: 16:00 WIB")
-    logger.info("Trading hours: 08:45 - 16:00 WIB")
+    logger.info("Scan interval   : 1 menit")
+    logger.info("Opening recap   : 08:45 WIB")
+    logger.info("Closing recap   : 16:00 WIB")
+    logger.info("Outcome check   : 16:30 WIB (setelah market close)")
+    logger.info("Trading hours   : 08:45 - 16:00 WIB")
+    logger.info(f"Learning system : {'Aktif' if _LEARNING_OK else 'Tidak aktif (no DB)'}")
     logger.info("=" * 50)
+
+    # Init learning DB
+    if _LEARNING_OK:
+        try:
+            ok = init_db()
+            logger.info(f"[Learning] DB: {'Siap ✅' if ok else 'Tidak tersedia ⚠️'}")
+        except Exception as e:
+            logger.warning(f"[Learning] DB init warning: {e}")
     
     # Initialize state manager
     state_manager = StateManager()
