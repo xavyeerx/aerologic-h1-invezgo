@@ -2,83 +2,108 @@
 
 ---
 
-## 🚀 DEPLOY KE RAILWAY (GRATIS)
+## 🚀 DEPLOY KE RENDER (GRATIS)
 
-### Langkah 1: Buat Akun GitHub (jika belum ada)
-1. Buka https://github.com
-2. Klik **Sign up** dan buat akun
+Render adalah platform cloud modern yang mendukung **Background Worker** — cocok untuk bot ini karena tidak membutuhkan web server.
 
-### Langkah 2: Upload Project ke GitHub
+### Langkah 1: Pastikan Project Ada di GitHub
+
 **Dari folder project, jalankan di terminal:**
 ```bash
 cd "d:\ALGO TRADE\ihsg-supertrend-scanner"
 
-# Inisialisasi Git
+# Jika belum di-init:
 git init
 git add .
-git commit -m "Initial commit - IHSG Scanner"
+git commit -m "Migrate to Render"
 
-# Buat repository baru di GitHub, lalu:
-git remote add origin https://github.com/USERNAME/ihsg-scanner.git
-git branch -M main
-git push -u origin main
+# Jika repo sudah ada, cukup push:
+git add .
+git commit -m "Add render.yaml for Render deployment"
+git push origin main
 ```
 
-> ⚠️ **PENTING:** Pastikan `config/settings.py` TIDAK berisi token/secret sebelum push!
+> ⚠️ **PENTING:** Pastikan `.gitignore` sudah mengecualikan file yang berisi token/secret!
 
-### Langkah 3: Setup Environment Variables
-Edit `config/settings.py` untuk menggunakan environment variables:
-```python
-import os
+### Langkah 2: Buat Akun Render
+1. Buka https://render.com
+2. Klik **Get Started for Free**
+3. Sign up menggunakan akun **GitHub** (lebih mudah)
 
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE")
-```
+### Langkah 3: Buat Background Worker Baru
+1. Di Render dashboard, klik **+ New** → **Background Worker**
+2. Pilih **Connect a repository** → pilih repo `ihsg-scanner`
+3. Klik **Connect**
 
-### Langkah 4: Deploy ke Railway
-1. Buka https://railway.app
-2. Klik **Login with GitHub**
-3. Klik **New Project** → **Deploy from GitHub repo**
-4. Pilih repository `ihsg-scanner`
-5. Railway akan otomatis detect Python dan deploy
+### Langkah 4: Konfigurasi Service
+Isi form dengan pengaturan berikut:
 
-### Langkah 5: Set Environment Variables di Railway
-1. Di dashboard Railway, klik project Anda
-2. Klik tab **Variables**
-3. Tambahkan:
-   - `TELEGRAM_BOT_TOKEN` = (token bot Anda)
-   - `TELEGRAM_CHAT_ID` = (chat ID Anda)
-4. Klik **Deploy** untuk restart dengan variabel baru
+| Field | Value |
+|-------|-------|
+| **Name** | `ihsg-supertrend-scanner` |
+| **Region** | `Singapore (Southeast Asia)` |
+| **Branch** | `main` |
+| **Runtime** | `Python 3` |
+| **Build Command** | `pip install -r requirements.txt` |
+| **Start Command** | `python scheduler.py` |
+| **Instance Type** | `Free` |
 
-### Langkah 6: Cek Status
-1. Klik tab **Deployments**
-2. Klik deployment terbaru
-3. Lihat **Logs** - harusnya ada: `IHSG SUPERTREND SCANNER - SCHEDULER`
+> [!TIP]
+> Render akan otomatis mendeteksi `render.yaml` yang sudah ada di repo — konfigurasi bisa langsung ter-import!
+
+### Langkah 5: Set Environment Variables
+Sebelum klik **Create Background Worker**, scroll ke bawah ke bagian **Environment Variables** dan tambahkan:
+
+| Key | Value |
+|-----|-------|
+| `TELEGRAM_BOT_TOKEN` | Token bot Telegram Anda |
+| `TELEGRAM_CHAT_ID` | Chat ID Telegram Anda |
+
+Klik **Add Environment Variable** untuk setiap entri.
+
+### Langkah 6: Deploy
+1. Klik **Create Background Worker**
+2. Render akan mulai build dan deploy otomatis
+3. Waktu build pertama biasanya 2-5 menit
+
+### Langkah 7: Cek Logs
+1. Di dashboard Render, klik service `ihsg-supertrend-scanner`
+2. Klik tab **Logs**
+3. Harusnya ada output: `IHSG SUPERTREND SCANNER v5.0 - SCHEDULER`
 
 ---
 
 ### ✅ Selesai!
-Bot akan berjalan otomatis 24/7. Cek Telegram untuk menerima alerts.
+Bot akan berjalan otomatis 24/7 di Render. Cek Telegram untuk menerima alerts.
+
+### ⚠️ Keterbatasan Free Tier Render
+| Hal | Detail |
+|-----|--------|
+| **Sleep** | Free worker **TIDAK sleep** (berbeda dengan Web Service) ✅ |
+| **RAM** | 512 MB — cukup untuk bot ini |
+| **CPU** | Shared, terbatas untuk free tier |
+| **Auto-deploy** | Otomatis setiap kali push ke GitHub |
 
 ### Troubleshooting
 | Issue | Solusi |
 |-------|--------|
-| Bot tidak jalan | Cek Logs di Railway dashboard |
-| Telegram error | Pastikan TOKEN dan CHAT_ID benar |
-| Crashing | Railway auto-restart, cek error di logs |
+| Build gagal | Cek tab **Logs** → bagian **Build** |
+| Bot tidak jalan | Cek **Runtime Logs** di dashboard |
+| Telegram error | Pastikan `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` sudah di-set di Environment Variables |
+| Crash loop | Render auto-restart, cek error di logs untuk penyebabnya |
 
 ---
 ---
 
 | Platform | Harga | Kelebihan |
 |----------|-------|-----------|
+| **Render** | Free tier | Gratis, tidak sleep untuk worker, mudah setup |
 | **DigitalOcean** | $6/bulan | Murah, stabil, tutorial lengkap |
 | **Vultr** | $6/bulan | Banyak lokasi Asia |
-| **Railway** | Free tier | Gratis untuk low usage |
 | **Google Cloud** | Free tier 1 tahun | Gratis e2-micro |
 
 > [!TIP]
-> Rekomendasi: **DigitalOcean Droplet $6/bulan** - Cukup untuk bot ini
+> Rekomendasi: **Render Free Tier** untuk percobaan, **DigitalOcean $6/bulan** jika butuh lebih stabil
 
 ---
 
