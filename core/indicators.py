@@ -473,27 +473,65 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_targets(df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate TP1 (quick target) and TP Swing (swing target)"""
+    """
+    Calculate TP1 (quick target) and TP2 (swing target).
+
+    Formula:
+      TP1 = entry + 1.0 × ATR14   → ambil profit cepat
+      TP2 = ambil yang lebih bermakna antara dua opsi:
+            • Resistance terdekat (jika berada dalam range TP2_MIN - TP2_MAX)
+            • entry + 2.5 × ATR14  (fallback jika tidak ada resistance valid)
+
+    Kenapa begitu?
+      - TP2 harus lebih tinggi dari TP1 tapi tidak terlalu jauh
+      - Jika ada resistance di range 1.3×ATR - 3.0×ATR, itu adalah level teknikal
+        yang nyata dan lebih akurat dari perhitungan ATR semata
+      - Jika resistance di luar range (terlalu dekat atau terlalu jauh),
+        gunakan fallback 2.5×ATR agar tetap masuk akal
+    """
     df = df.copy()
-    
+
     if 'atr' not in df.columns:
         df = calculate_atr(df)
-    
-    # TP1 = target terdekat & tercepat (close + 1×ATR)
-    df['tp1'] = df['close'] + df['atr']
-    
-    # TP Swing = target swing lebih besar (close + 1.5×ATR)
-    # If resistance is available and closer than ATR-based, use resistance
-    atr_swing = df['close'] + (df['atr'] * TP1_MULTIPLIER)
-    
+
+    close = df['close']
+    atr   = df['atr']
+
+    # ── TP1: target cepat ─────────────────────────────────────────
+    df['tp1'] = close + (atr * TP1_MULTIPLIER)          # close + 1.0×ATR
+
+    # ── TP2: swing target ─────────────────────────────────────────
+    tp2_atr_fallback = close + (atr * TP2_MULTIPLIER)   # close + 2.5×ATR
+
+    tp2_min_price = close + (atr * TP2_MIN_MULTIPLIER)  # batas bawah: entry + 1.3×ATR
+    tp2_max_price = close + (atr * TP2_MAX_MULTIPLIER)  # batas atas : entry + 3.0×ATR
+
     if 'resistance' in df.columns:
-        # Use nearest resistance if it's above price, else use ATR-based
-        resistance_valid = df['resistance'].notna() & (df['resistance'] > df['close'])
-        df['tp_swing'] = np.where(resistance_valid, df['resistance'], atr_swing)
+        resistance = df['resistance']
+
+        # Resistance valid untuk TP2 jika:
+        # 1. Ada nilainya (tidak NaN)
+        # 2. Di atas harga sekarang
+        # 3. Tidak terlalu dekat (> TP2_MIN = 1.3×ATR) → tidak bertabrakan dengan TP1
+        # 4. Tidak terlalu jauh  (< TP2_MAX = 3.0×ATR) → realistis untuk dicapai
+        resistance_valid = (
+            resistance.notna() &
+            (resistance > close) &
+            (resistance >= tp2_min_price) &
+            (resistance <= tp2_max_price)
+        )
+
+        df['tp2']        = np.where(resistance_valid, resistance, tp2_atr_fallback)
+        df['tp2_source'] = np.where(resistance_valid, 'RESISTANCE', 'ATR')
     else:
-        df['tp_swing'] = atr_swing
-    
+        df['tp2']        = tp2_atr_fallback
+        df['tp2_source'] = 'ATR'
+
+    # Backward compat: tp_swing = tp2
+    df['tp_swing'] = df['tp2']
+
     return df
+
 
 
 def calculate_momentum(df: pd.DataFrame, period: int = MOMENTUM_PERIOD) -> pd.DataFrame:

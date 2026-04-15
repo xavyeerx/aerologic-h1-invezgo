@@ -56,8 +56,12 @@ CONFIRMATION_BARS = 2
 PIVOT_LOOKBACK = 10
 
 # === EXIT STRATEGY ===
-TP1_MULTIPLIER = 1.5
-TP2_MULTIPLIER = 2.5
+TP1_MULTIPLIER = 1.0    # TP1 = entry + 1.0×ATR  (quick target)
+TP2_MULTIPLIER = 2.5    # TP2 = entry + 2.5×ATR  (swing target, fallback)
+TP2_MIN_MULTIPLIER = 1.3  # Resistance hanya jadi TP2 jika > entry + 1.3×ATR
+                           # (hindari TP2 yang terlalu dekat dengan TP1)
+TP2_MAX_MULTIPLIER = 3.0  # Resistance hanya jadi TP2 jika < entry + 3.0×ATR
+                           # (hindari TP2 yang terlalu jauh tidak realistis)
 SL_SWING_LOOKBACK = 10
 
 # === DCA SETTINGS ===

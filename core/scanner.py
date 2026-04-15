@@ -36,8 +36,10 @@ class ScanResult:
         self.div_grade = ""                # v5.1: "STRONG" / "MODERATE" / ""
         
         # Target prices
-        self.tp1 = 0.0              # Quick target (1×ATR)
-        self.tp_swing = 0.0         # Swing target (1.5×ATR or resistance)
+        self.tp1 = 0.0              # Quick target  (entry + 1.0×ATR)
+        self.tp2 = 0.0              # Swing target  (resistance atau entry + 2.5×ATR)
+        self.tp2_source = "ATR"     # 'RESISTANCE' atau 'ATR' — dari mana TP2 dihitung
+        self.tp_swing = 0.0         # Alias tp2 (backward compat)
         
         # Additional info
         self.volume_ratio = 0.0
@@ -91,8 +93,10 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         result.stoch_d = latest.get('stoch_d', 50.0)
         
         # Target prices
-        result.tp1 = latest.get('tp1', 0.0)
-        result.tp_swing = latest.get('tp_swing', 0.0)
+        result.tp1        = latest.get('tp1', 0.0)
+        result.tp2        = latest.get('tp2', 0.0)
+        result.tp2_source = latest.get('tp2_source', 'ATR')
+        result.tp_swing   = result.tp2   # alias
         
         # v5 additional data
         result.adx = latest.get('adx', 0.0)
