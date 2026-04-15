@@ -20,6 +20,19 @@ from core.scanner import scan_all_stocks, filter_signals, filter_all_current_sig
 from database.state_manager import StateManager
 from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_morning_recap_message
 
+# ── Learning system (graceful degradation jika DB tidak ada) ───────────
+try:
+    from learning.db import init_db, is_available as db_available
+    from learning.market_regime import get_market_regime
+    from learning.signal_tracker import track_all_signals
+    _LEARNING_IMPORTS_OK = True
+except ImportError as e:
+    _LEARNING_IMPORTS_OK = False
+    def db_available(): return False
+    def get_market_regime(**kw): return {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
+    def track_all_signals(*a, **kw): return 0
+    def init_db(): return False
+
 # Setup logging
 os.makedirs('logs', exist_ok=True)
 os.makedirs('database', exist_ok=True)
@@ -118,7 +131,15 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # ✅ FREE MEMORY: release large DataFrames immediately after scan
     del stock_data
     gc.collect()
-    
+
+    # ── Ambil kondisi pasar IHSG (untuk learning tracking) ───────────
+    regime_info = {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
+    if _LEARNING_IMPORTS_OK:
+        try:
+            regime_info = get_market_regime()
+        except Exception as e:
+            logger.warning(f"[Learning] Gagal ambil market regime: {e}")
+
     # Filter signals
     all_signals = filter_signals(results)
     
@@ -142,6 +163,15 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         for signal_type, signal_list in new_signals.items():
             for r in signal_list:
                 state_manager.add_alerted_stock(signal_type, r.ticker)
+
+        # ── Learning: catat sinyal ke DB ──────────────────────────────
+        if _LEARNING_IMPORTS_OK:
+            try:
+                tracked = track_all_signals(new_signals, regime_info)
+                if tracked > 0:
+                    logger.info(f"[Learning] {tracked} sinyal direcord ke DB")
+            except Exception as e:
+                logger.warning(f"[Learning] Tracking error (bot tetap jalan): {e}")
     else:
         logger.info("No NEW signals detected this scan")
     
@@ -238,17 +268,28 @@ def main():
     """Main entry point"""
     os.makedirs('logs', exist_ok=True)
     os.makedirs('database', exist_ok=True)
-    
+
     logger.info("IHSG Supertrend Scanner starting...")
-    
+
+    # Init learning DB (tidak wajib — bot tetap jalan tanpa DB)
+    if _LEARNING_IMPORTS_OK:
+        try:
+            ok = init_db()
+            if ok:
+                logger.info("[Learning] ✅ PostgreSQL learning database siap")
+            else:
+                logger.info("[Learning] ⚠️ DB tidak tersedia — learning dinonaktifkan")
+        except Exception as e:
+            logger.warning(f"[Learning] DB init error: {e}")
+
     # Initialize state manager
     state_manager = StateManager()
-    
+
     # Check if this is first run
     if len(state_manager.get_all_states()) == 0:
         logger.info("First run detected. Initial scan will not generate alerts.")
         logger.info("This is to establish baseline states for all stocks.")
-    
+
     # Run scan
     run_scan(state_manager, force=True)
 

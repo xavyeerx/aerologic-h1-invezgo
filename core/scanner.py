@@ -60,6 +60,11 @@ class ScanResult:
         self.support = 0.0
         self.resistance = 0.0
 
+        # Learning features (Phase 1 — dicatat ke DB)
+        self.bars_since_breakout = 0       # candle sejak supertrend flip bullish
+        self.price_vs_supertrend_pct = 0.0 # % harga di atas garis supertrend
+        self.atr_pct = 0.0                 # ATR / close × 100 (relatif volatility)
+
 
 def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) -> ScanResult:
     """
@@ -103,6 +108,26 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         result.is_trending = latest.get('is_trending', False)
         result.support = latest.get('support', 0.0)
         result.resistance = latest.get('resistance', 0.0)
+
+        # ── Learning features ──────────────────────────────────────
+        # bars_since_breakout: hitung candle berturut sejak direction flip ke 1
+        bars_since_breakout = 0
+        for i in range(len(df) - 1, -1, -1):
+            if df.iloc[i]['direction'] == 1:
+                bars_since_breakout += 1
+            else:
+                break
+        result.bars_since_breakout = bars_since_breakout
+
+        # price_vs_supertrend_pct: seberapa jauh harga di atas supertrend (%)
+        st_val = latest.get('supertrend', 0.0)
+        if st_val and st_val > 0:
+            result.price_vs_supertrend_pct = round(
+                (latest['close'] - st_val) / st_val * 100, 2
+            )
+
+        # atr_pct: volatilitas relatif (ATR / harga × 100)
+        result.atr_pct = round(float(latest.get('atr_percent', 0.0)), 2)
         
         # MACD status
         if latest.get('macd_cross_up', False):
