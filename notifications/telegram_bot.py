@@ -59,26 +59,22 @@ def send_telegram_message(message: str) -> bool:
 
 
 def _format_tp_info(r) -> str:
-    """Format target price info (TP1 + TP2 + SL) for a stock"""
+    """Format target price info (TP1, TP2, SL) for a stock"""
     lines = []
-
-    # TP1
-    if getattr(r, 'tp1', 0) and r.tp1 > 0:
+    if getattr(r, 'tp1', 0) > 0:
         tp1_pct = ((r.tp1 - r.price) / r.price) * 100
         lines.append(f"   🎯 TP1: {r.tp1:,.0f} (+{tp1_pct:.1f}%)")
-
-    # TP2 dengan label sumber (ATR atau Resistance)
-    tp2 = getattr(r, 'tp2', 0)
-    if tp2 and tp2 > 0:
-        tp2_pct = ((tp2 - r.price) / r.price) * 100
-        tp2_src = getattr(r, 'tp2_source', 'ATR')
-        src_label = "📋 resist" if tp2_src == 'RESISTANCE' else "📐 ATR"
-        lines.append(f"   🎯 TP2: {tp2:,.0f} (+{tp2_pct:.1f}%) {src_label}")
-
-    # SL selalu 5% di bawah entry
+    
+    if getattr(r, 'tp2', 0) > 0:
+        tp2_pct = ((r.tp2 - r.price) / r.price) * 100
+        source = getattr(r, 'tp2_source', 'ATR')
+        src_label = "📋 resist" if source == "RESISTANCE" else "ATR"
+        lines.append(f"   🚀 TP2: {r.tp2:,.0f} (+{tp2_pct:.1f}%) {src_label}")
+    
+    # Tambah SL 5% dari harga terkini
     sl_price = r.price * 0.95
-    lines.append(f"   🛑 SL:  {sl_price:,.0f} (-5.0%)")
-
+    lines.append(f"   🛑 SL: {sl_price:,.0f} (-5.0%)")
+    
     return "\n".join(lines)
 
 
