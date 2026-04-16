@@ -76,7 +76,11 @@ def _fetch_ihsg() -> Optional[pd.DataFrame]:
             logger.warning("[MarketRegime] Data IHSG tidak cukup")
             return None
 
+        # Fix: yfinance versi baru return MultiIndex columns → flatten dulu
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
         data.columns = data.columns.str.lower()
+
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
         return data.dropna(subset=['close'])
