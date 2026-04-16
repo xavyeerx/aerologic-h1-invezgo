@@ -4,10 +4,14 @@
 # Menyimpan signal history, learning insights, dan adaptive config.
 # Bot berjalan normal tanpa DB (graceful degradation).
 #
+# Urutan koneksi:
+#   1. DATABASE_URL       (internal Railway: postgres.railway.internal)
+#   2. DATABASE_PUBLIC_URL(public Railway:   metro.proxy.rlwy.net)
+#
 # Setup Railway:
 #   1. Railway dashboard → project → "+ New" → "Database" → PostgreSQL
-#   2. Klik PostgreSQL service → "Connect" → copy DATABASE_URL
-#   3. Set env var DATABASE_URL di service utama
+#   2. Postgres service → Variables → copy DATABASE_PUBLIC_URL
+#   3. Web service → Variables → set DATABASE_URL = (paste public URL)
 # ============================================================
 
 import os
@@ -16,8 +20,11 @@ import psycopg2
 
 logger = logging.getLogger(__name__)
 
-# Railway otomatis set ini saat PostgreSQL addon aktif
-DATABASE_URL = os.getenv('DATABASE_URL', '')
+# Coba internal URL dulu, fallback ke public URL
+_RAW_DB_URL = (
+    os.getenv('DATABASE_URL', '') or
+    os.getenv('DATABASE_PUBLIC_URL', '')
+)
 
 # Schema SQL — semua tabel yang dibutuhkan learning system
 _SCHEMA_SQL = """
@@ -121,12 +128,14 @@ def _fix_url(url: str) -> str:
 def get_connection():
     """
     Buka koneksi ke PostgreSQL.
-    Return None jika DATABASE_URL tidak di-set (graceful degradation).
+    Coba DATABASE_URL (internal) dulu, lalu DATABASE_PUBLIC_URL.
+    Return None jika tidak ada URL atau koneksi gagal.
     """
-    if not DATABASE_URL:
+    if not _RAW_DB_URL:
         return None
+    url = _fix_url(_RAW_DB_URL)
     try:
-        conn = psycopg2.connect(_fix_url(DATABASE_URL))
+        conn = psycopg2.connect(url)
         conn.autocommit = False
         return conn
     except Exception as e:
@@ -142,7 +151,10 @@ def init_db() -> bool:
     """
     conn = get_connection()
     if not conn:
-        logger.warning("[LearningDB] DATABASE_URL tidak di-set — learning system dinonaktifkan")
+        if not _RAW_DB_URL:
+            logger.warning("[LearningDB] DATABASE_URL tidak di-set — tambahkan variable DATABASE_URL di Railway service")
+        else:
+            logger.warning("[LearningDB] Koneksi ke DB gagal — learning system dinonaktifkan")
         return False
 
     try:
@@ -225,5 +237,5 @@ def update_adaptive_config(key: str, new_value: float, old_value: float,
 
 
 def is_available() -> bool:
-    """Cek apakah DB connection tersedia"""
-    return bool(DATABASE_URL)
+    """Cek apakah DB URL sudah di-set (koneksi belum tentu berhasil)"""
+    return bool(_RAW_DB_URL)
