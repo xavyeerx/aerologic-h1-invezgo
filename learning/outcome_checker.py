@@ -385,67 +385,48 @@ def _update_signal_outcome(conn, signal_id, outcome: dict):
         ))
 
 
-def _send_recent_3d_summary(conn):
+def _send_daily_evaluation_summary(updated_items: list):
     """
-    Kirim rekap 3 hari terakhir (rolling) di jam 16:30:
-    mana yang sudah TP2, TP1, SL, dan masih dipantau.
+    Kirim rekap evaluasi HARI INI saja (berdasarkan sinyal yang berubah status hari ini).
+    Ini membuat sinyal swing yang hit TP di hari ke-10 tetap muncul di hari dia hit.
     """
     try:
-        with conn.cursor() as cur:
-            cur.execute("""
-                SELECT ticker, signal_type, sent_at,
-                       tp1_hit, tp2_hit, outcome_1d, outcome_3d, outcome_5d, outcome_10d, evaluation_done
-                FROM signal_history
-                WHERE sent_at >= NOW() - interval '3 days'
-                ORDER BY sent_at ASC
-            """)
-            rows = cur.fetchall()
-
-        if not rows:
+        if not updated_items:
             return
 
         tp2_list = []
         tp1_list = []
         sl_list = []
 
-        def _is_sl(o1, o3, o5, o10):
-            vals = {str(o1), str(o3), str(o5), str(o10)}
-            return 'HIT_SL' in vals
+        for signal, outcome in updated_items:
+            ticker = signal['ticker'].replace('.JK', '')
+            sig = signal['signal_type']
+            item = (ticker, sig)
 
-        seen = set()
-        for ticker, signal_type, sent_at, tp1_hit, tp2_hit, o1, o3, o5, o10, eval_done in rows:
-            # Hanya hitung sinyal pertama kali (earliest) per ticker+tipe dalam window 3 hari
-            key = (ticker, signal_type)
-            if key in seen:
-                continue
-            seen.add(key)
-
-            item = (ticker.replace('.JK', ''), signal_type, sent_at)
-            if tp2_hit:
+            if outcome.get('tp2_hit', False):
                 tp2_list.append(item)
-            elif tp1_hit:
+            elif outcome.get('tp1_hit', False):
                 tp1_list.append(item)
-            elif _is_sl(o1, o3, o5, o10):
+            elif outcome.get('outcome_10d') == HIT_SL or outcome.get('outcome_5d') == HIT_SL or outcome.get('outcome_3d') == HIT_SL or outcome.get('outcome_1d') == HIT_SL:
                 sl_list.append(item)
-            else:
-                # Yang masih dipantau tidak ditampilkan di rekap sesuai request.
-                pass
 
-        total = len(rows)
+        settled = len(tp2_list) + len(tp1_list) + len(sl_list)
+        if settled == 0:
+            return
+
         lines = [
             "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            "📆 <b>REKAP EVALUASI 3 HARI</b>",
+            "📆 <b>REKAP EVALUASI HARI INI</b>",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━",
             f"⏰ {datetime.now(WIB).strftime('%d %b %Y, %H:%M WIB')}",
-            f"📊 Total sinyal dipantau: {total}",
             "",
         ]
 
-        def _append_section(title, emoji, items, limit=20):
+        def _append_section(title, emoji, items, limit=30):
             if not items:
                 return
             lines.append(f"{emoji} <b>{title}</b> ({len(items)})")
-            for tkr, sig, _ in items[:limit]:
+            for tkr, sig in items[:limit]:
                 lines.append(f"  • {tkr} ({sig})")
             if len(items) > limit:
                 lines.append(f"  • ... +{len(items) - limit} lainnya")
@@ -455,19 +436,57 @@ def _send_recent_3d_summary(conn):
         _append_section("HIT TP1", "🎯", tp1_list)
         _append_section("HIT SL", "🛑", sl_list)
 
-        settled = len(tp2_list) + len(tp1_list) + len(sl_list)
         win = len(tp2_list) + len(tp1_list)
         wr = (win / settled * 100) if settled > 0 else 0
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
         lines.append(f"✅ Win: {win} | ❌ Loss: {len(sl_list)} | WR: {wr:.0f}%")
-        lines.append("⏳ Active tidak ditampilkan di rekap")
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         send_telegram_message("\n".join(lines))
-        logger.info("[OutcomeChecker] Rekap evaluasi 3 hari berhasil dikirim")
-
+        logger.info("[OutcomeChecker] Rekap evaluasi harian berhasil dikirim")
     except Exception as e:
-        logger.warning(f"[OutcomeChecker] Gagal kirim rekap 3 hari: {e}")
+        logger.warning(f"[OutcomeChecker] Gagal kirim rekap evaluasi harian: {e}")
+
+
+def _had_sl_before(signal: dict) -> bool:
+    """Check whether signal was already marked SL in previous stored outcomes."""
+    prev_labels = {
+        str(signal.get('outcome_1d', PENDING)),
+        str(signal.get('outcome_3d', PENDING)),
+        str(signal.get('outcome_5d', PENDING)),
+        str(signal.get('outcome_10d', PENDING)),
+    }
+    return HIT_SL in prev_labels
+
+
+def _has_sl_now(outcome: dict) -> bool:
+    """Check whether evaluated outcome currently indicates SL."""
+    now_labels = {
+        str(outcome.get('outcome_1d', PENDING)),
+        str(outcome.get('outcome_3d', PENDING)),
+        str(outcome.get('outcome_5d', PENDING)),
+        str(outcome.get('outcome_10d', PENDING)),
+    }
+    return HIT_SL in now_labels
+
+
+def _is_fresh_resolution(signal: dict, outcome: dict) -> bool:
+    """
+    True only when status resolution changes today:
+    - TP2 newly hit
+    - TP1 newly hit
+    - SL newly hit
+    This prevents yesterday's resolved signals from reappearing tomorrow.
+    """
+    prev_tp2 = bool(signal.get('tp2_hit', False))
+    prev_tp1 = bool(signal.get('tp1_hit', False))
+    prev_sl = _had_sl_before(signal)
+
+    now_tp2 = bool(outcome.get('tp2_hit', False))
+    now_tp1 = bool(outcome.get('tp1_hit', False))
+    now_sl = _has_sl_now(outcome)
+
+    return (now_tp2 and not prev_tp2) or (now_tp1 and not prev_tp1) or (now_sl and not prev_sl)
 
 
 def run_outcome_check() -> int:
@@ -488,6 +507,8 @@ def run_outcome_check() -> int:
 
     evaluated = 0
     notified  = 0
+    updated_items = []
+    fresh_resolution_items = []
 
     try:
         pending = _get_pending_signals(conn)
@@ -542,6 +563,9 @@ def run_outcome_check() -> int:
             if has_update:
                 _update_signal_outcome(conn, signal['signal_id'], outcome)
                 evaluated += 1
+                updated_items.append((signal, outcome))
+                if _is_fresh_resolution(signal, outcome):
+                    fresh_resolution_items.append((signal, outcome))
 
                 # Kirim notif Telegram jika evaluation FINAL selesai
                 if outcome['evaluation_done']:
@@ -558,7 +582,7 @@ def run_outcome_check() -> int:
                         logger.warning(f"[OutcomeChecker] Gagal kirim notif {ticker}: {e}")
 
         conn.commit()
-        _send_recent_3d_summary(conn)
+        _send_daily_evaluation_summary(fresh_resolution_items)
         logger.info(
             f"[OutcomeChecker] Selesai: {evaluated} diupdate, "
             f"{notified} notifikasi dikirim"
