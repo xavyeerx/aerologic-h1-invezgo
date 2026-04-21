@@ -168,14 +168,9 @@ def _evaluate_signal(entry: float, tp1: float, tp2: float, sl: float,
         max_gain     = max(max_gain,     day_gain)
         max_drawdown = min(max_drawdown, day_loss)
 
-        # ── Evaluasi per bar (prioritas: SL > TP2 > TP1) ──────────
-        if low <= sl:
-            # Stop Loss kena
-            if final_outcome == PENDING:
-                final_outcome = HIT_SL
-                result['days_to_outcome'] = trade_day
-            break   # trade selesai
-
+        # ── Evaluasi per bar (prioritas WIN dulu):
+        # Jika TP sudah kena kapan pun, status dianggap WIN permanen.
+        # Walaupun setelahnya harga turun ke area SL, tetap dihitung TP.
         if high >= tp2:
             result['tp2_hit']    = True
             result['tp1_hit']    = True  # TP2 berarti TP1 juga sudah terlewati
@@ -194,7 +189,17 @@ def _evaluate_signal(entry: float, tp1: float, tp2: float, sl: float,
                 result['days_to_tp1'] = trade_day
             if final_outcome == PENDING:
                 final_outcome = HIT_TP1
-                # Tidak break — terus pantau apakah TP2 bisa tercapai
+                result['days_to_outcome'] = trade_day
+            # Begitu TP1 kena, trade dianggap WIN dan selesai.
+            # Ini sesuai rule: hit TP duluan => tetap hit TP.
+            break
+
+        if low <= sl:
+            # Stop Loss hanya dihitung jika belum pernah hit TP
+            if final_outcome == PENDING:
+                final_outcome = HIT_SL
+                result['days_to_outcome'] = trade_day
+            break   # trade selesai
 
         # ── Update checkpoint outcomes ──────────────────────────────
         current_label = final_outcome if final_outcome != PENDING else _classify_partial(close, entry, max_gain)
@@ -392,7 +397,7 @@ def _send_recent_3d_summary(conn):
                        tp1_hit, tp2_hit, outcome_1d, outcome_3d, outcome_5d, outcome_10d, evaluation_done
                 FROM signal_history
                 WHERE sent_at >= NOW() - interval '3 days'
-                ORDER BY sent_at DESC
+                ORDER BY sent_at ASC
             """)
             rows = cur.fetchall()
 
@@ -402,13 +407,19 @@ def _send_recent_3d_summary(conn):
         tp2_list = []
         tp1_list = []
         sl_list = []
-        active_list = []
 
         def _is_sl(o1, o3, o5, o10):
             vals = {str(o1), str(o3), str(o5), str(o10)}
             return 'HIT_SL' in vals
 
+        seen = set()
         for ticker, signal_type, sent_at, tp1_hit, tp2_hit, o1, o3, o5, o10, eval_done in rows:
+            # Hanya hitung sinyal pertama kali (earliest) per ticker+tipe dalam window 3 hari
+            key = (ticker, signal_type)
+            if key in seen:
+                continue
+            seen.add(key)
+
             item = (ticker.replace('.JK', ''), signal_type, sent_at)
             if tp2_hit:
                 tp2_list.append(item)
@@ -417,7 +428,8 @@ def _send_recent_3d_summary(conn):
             elif _is_sl(o1, o3, o5, o10):
                 sl_list.append(item)
             else:
-                active_list.append(item)
+                # Yang masih dipantau tidak ditampilkan di rekap sesuai request.
+                pass
 
         total = len(rows)
         lines = [
@@ -442,14 +454,13 @@ def _send_recent_3d_summary(conn):
         _append_section("HIT TP2", "🏆", tp2_list)
         _append_section("HIT TP1", "🎯", tp1_list)
         _append_section("HIT SL", "🛑", sl_list)
-        _append_section("MASIH DIPANTAU", "⏳", active_list)
 
         settled = len(tp2_list) + len(tp1_list) + len(sl_list)
         win = len(tp2_list) + len(tp1_list)
         wr = (win / settled * 100) if settled > 0 else 0
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
         lines.append(f"✅ Win: {win} | ❌ Loss: {len(sl_list)} | WR: {wr:.0f}%")
-        lines.append(f"⏳ Active: {len(active_list)}")
+        lines.append("⏳ Active tidak ditampilkan di rekap")
         lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         send_telegram_message("\n".join(lines))
