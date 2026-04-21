@@ -183,3 +183,71 @@ def track_all_signals(new_signals: dict, regime_info: dict) -> int:
     if tracked > 0:
         logger.info(f"[SignalTracker] Total {tracked} sinyal berhasil direcord ke DB")
     return tracked
+
+
+def get_active_signal_tickers_by_type(lookback_days: int = 14) -> dict:
+    """
+    Ambil sinyal ACTIVE terbaru dari PostgreSQL untuk kebutuhan recap.
+
+    ACTIVE didefinisikan sebagai:
+      - evaluation_done = FALSE
+      - dan belum pernah hit TP1/TP2
+
+    Return format:
+      {
+        'strong_buy': {'BBCA.JK', ...},
+        'accumulation': {...},
+        'early_entry': {...},
+        'bull_div': {...}
+      }
+    """
+    active = {
+        'strong_buy': set(),
+        'accumulation': set(),
+        'early_entry': set(),
+        'bull_div': set(),
+    }
+
+    if not is_available():
+        return active
+
+    conn = get_connection()
+    if not conn:
+        return active
+
+    sql = """
+        SELECT DISTINCT ON (ticker, signal_type)
+            ticker, signal_type, sent_at, evaluation_done, tp1_hit, tp2_hit
+        FROM signal_history
+        WHERE sent_at >= NOW() - (%s || ' days')::interval
+        ORDER BY ticker, signal_type, sent_at DESC
+    """
+
+    reverse_map = {v: k for k, v in _SIGNAL_TYPE_MAP.items()}
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, (lookback_days,))
+            rows = cur.fetchall()
+
+        for ticker, signal_type, _sent_at, evaluation_done, tp1_hit, tp2_hit in rows:
+            signal_key = reverse_map.get(signal_type)
+            if signal_key is None:
+                continue
+
+            # Done signals are excluded from recap:
+            # - already fully evaluated, or
+            # - already hit TP1/TP2
+            done = bool(evaluation_done) or bool(tp1_hit) or bool(tp2_hit)
+            if not done:
+                active[signal_key].add(ticker)
+
+    except Exception as e:
+        logger.warning(f"[SignalTracker] Gagal ambil active signals: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    return active

@@ -24,13 +24,15 @@ from notifications.telegram_bot import send_all_alerts, send_startup_message, se
 try:
     from learning.db import init_db, is_available as db_available
     from learning.market_regime import get_market_regime
-    from learning.signal_tracker import track_all_signals
+    from learning.signal_tracker import track_all_signals, get_active_signal_tickers_by_type
     _LEARNING_IMPORTS_OK = True
 except ImportError as e:
     _LEARNING_IMPORTS_OK = False
     def db_available(): return False
     def get_market_regime(**kw): return {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
     def track_all_signals(*a, **kw): return 0
+    def get_active_signal_tickers_by_type(*a, **kw):
+        return {'strong_buy': set(), 'accumulation': set(), 'early_entry': set(), 'bull_div': set()}
     def init_db(): return False
 
 # Setup logging
@@ -236,6 +238,36 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     
     # Get ALL current matching signals, excluding those that already hit TP/SL
     all_current_signals = filter_all_current_signals(results, state_manager=state_manager)
+
+    # Additional strict filter: only show ACTIVE signals from PostgreSQL tracker
+    # so old/done signals do not appear in morning/evening recap.
+    if _LEARNING_IMPORTS_OK and db_available():
+        active_map = get_active_signal_tickers_by_type(lookback_days=14)
+        logger.info(
+            "[Recap] Active signals from DB: "
+            f"SB={len(active_map['strong_buy'])}, "
+            f"ACC={len(active_map['accumulation'])}, "
+            f"EE={len(active_map['early_entry'])}, "
+            f"DIV={len(active_map['bull_div'])}"
+        )
+
+        for signal_type in ('strong_buy', 'accumulation', 'early_entry', 'bull_div'):
+            allowed_tickers = active_map.get(signal_type, set())
+            all_current_signals[signal_type] = [
+                r for r in all_current_signals[signal_type] if r.ticker in allowed_tickers
+            ]
+
+        # Bullish category has no direct DB signal_type. Keep only tickers that are active
+        # in at least one actionable bucket to avoid stale bullish names.
+        actionable = (
+            active_map.get('strong_buy', set())
+            | active_map.get('accumulation', set())
+            | active_map.get('early_entry', set())
+            | active_map.get('bull_div', set())
+        )
+        all_current_signals['bullish'] = [
+            r for r in all_current_signals['bullish'] if r.ticker in actionable
+        ]
     
     # Count total signals
     total_signals = sum(len(v) for v in all_current_signals.values())
