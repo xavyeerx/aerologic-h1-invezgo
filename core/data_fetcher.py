@@ -60,7 +60,10 @@ def _download_batch(tickers: List[str], period: str, interval: str, attempt: int
         if len(tickers) == 1:
             ticker = tickers[0]
             df = data.copy()
-            df.columns = df.columns.str.lower()
+            # ── Fix: flatten MultiIndex jika yfinance mengembalikannya ──
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+            df.columns = [str(c).lower() for c in df.columns]
             if df.index.tz is not None:
                 df.index = df.index.tz_localize(None)
             df = df.dropna(subset=['close'])
@@ -72,7 +75,10 @@ def _download_batch(tickers: List[str], period: str, interval: str, attempt: int
                     if ticker not in data.columns.get_level_values(0):
                         continue
                     df = data[ticker].copy()
-                    df.columns = df.columns.str.lower()
+                    # data[ticker] mengembalikan flat DataFrame, tapi pastikan aman
+                    if isinstance(df.columns, pd.MultiIndex):
+                        df.columns = df.columns.get_level_values(0)
+                    df.columns = [str(c).lower() for c in df.columns]
                     if df.index.tz is not None:
                         df.index = df.index.tz_localize(None)
                     df = df.dropna(subset=['close'])

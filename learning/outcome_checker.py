@@ -61,28 +61,57 @@ def _count_trading_days(from_date: date, to_date: date) -> int:
 
 
 def _fetch_daily_ohlc(ticker: str, from_date: date, to_date: date) -> Optional[pd.DataFrame]:
-    """Fetch data OHLC harian untuk satu ticker dalam rentang tanggal"""
+    """Fetch data OHLC harian untuk satu ticker dalam rentang tanggal.
+
+    Fix: yfinance >=0.2.x mengembalikan MultiIndex DataFrame bahkan untuk
+    1 ticker — gunakan multi_level_index=False agar kolom tetap flat.
+    Fallback manual flatten tersedia untuk kompatibilitas lintas versi.
+    """
     try:
         start_str = from_date.strftime('%Y-%m-%d')
         # +2 hari buffer untuk memastikan data hari terakhir masuk
         end_str = (to_date + timedelta(days=2)).strftime('%Y-%m-%d')
 
-        data = yf.download(
-            ticker,
-            start=start_str,
-            end=end_str,
-            interval='1d',
-            progress=False,
-            auto_adjust=True
-        )
+        # ── Coba dengan multi_level_index=False (yfinance >=0.2.31) ──────
+        try:
+            data = yf.download(
+                ticker,
+                start=start_str,
+                end=end_str,
+                interval='1d',
+                progress=False,
+                auto_adjust=True,
+                multi_level_index=False,   # <── fix utama: paksa flat columns
+            )
+        except TypeError:
+            # Versi lama yfinance tidak mengenal multi_level_index
+            data = yf.download(
+                ticker,
+                start=start_str,
+                end=end_str,
+                interval='1d',
+                progress=False,
+                auto_adjust=True,
+            )
+
         if data is None or data.empty:
             return None
-        data.columns = data.columns.str.lower()
+
+        # ── Flatten MultiIndex columns jika masih ada ────────────────────
+        # Jika kolom berupa MultiIndex (tuple), ambil level-0 saja (nama metrik)
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+
+        # Lowercase semua nama kolom (aman setelah flatten)
+        data.columns = [str(c).lower() for c in data.columns]
+
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
+
         # Ambil hanya bar setelah signal date
         data = data[data.index.date > from_date]
         return data if not data.empty else None
+
     except Exception as e:
         logger.warning(f"[OutcomeChecker] Gagal fetch {ticker}: {e}")
         return None
