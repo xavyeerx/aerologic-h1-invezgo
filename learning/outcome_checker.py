@@ -108,8 +108,9 @@ def _fetch_daily_ohlc(ticker: str, from_date: date, to_date: date) -> Optional[p
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
 
-        # Ambil hanya bar setelah signal date
-        data = data[data.index.date > from_date]
+        # Include bar pada hari sinyal juga, agar evaluasi 16:30
+        # bisa mendeteksi TP/SL yang terjadi di hari yang sama.
+        data = data[data.index.date >= from_date]
         return data if not data.empty else None
 
     except Exception as e:
@@ -379,6 +380,85 @@ def _update_signal_outcome(conn, signal_id, outcome: dict):
         ))
 
 
+def _send_recent_3d_summary(conn):
+    """
+    Kirim rekap 3 hari terakhir (rolling) di jam 16:30:
+    mana yang sudah TP2, TP1, SL, dan masih dipantau.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT ticker, signal_type, sent_at,
+                       tp1_hit, tp2_hit, outcome_1d, outcome_3d, outcome_5d, outcome_10d, evaluation_done
+                FROM signal_history
+                WHERE sent_at >= NOW() - interval '3 days'
+                ORDER BY sent_at DESC
+            """)
+            rows = cur.fetchall()
+
+        if not rows:
+            return
+
+        tp2_list = []
+        tp1_list = []
+        sl_list = []
+        active_list = []
+
+        def _is_sl(o1, o3, o5, o10):
+            vals = {str(o1), str(o3), str(o5), str(o10)}
+            return 'HIT_SL' in vals
+
+        for ticker, signal_type, sent_at, tp1_hit, tp2_hit, o1, o3, o5, o10, eval_done in rows:
+            item = (ticker.replace('.JK', ''), signal_type, sent_at)
+            if tp2_hit:
+                tp2_list.append(item)
+            elif tp1_hit:
+                tp1_list.append(item)
+            elif _is_sl(o1, o3, o5, o10):
+                sl_list.append(item)
+            else:
+                active_list.append(item)
+
+        total = len(rows)
+        lines = [
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "📆 <b>REKAP EVALUASI 3 HARI</b>",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            f"⏰ {datetime.now(WIB).strftime('%d %b %Y, %H:%M WIB')}",
+            f"📊 Total sinyal dipantau: {total}",
+            "",
+        ]
+
+        def _append_section(title, emoji, items, limit=20):
+            if not items:
+                return
+            lines.append(f"{emoji} <b>{title}</b> ({len(items)})")
+            for tkr, sig, _ in items[:limit]:
+                lines.append(f"  • {tkr} ({sig})")
+            if len(items) > limit:
+                lines.append(f"  • ... +{len(items) - limit} lainnya")
+            lines.append("")
+
+        _append_section("HIT TP2", "🏆", tp2_list)
+        _append_section("HIT TP1", "🎯", tp1_list)
+        _append_section("HIT SL", "🛑", sl_list)
+        _append_section("MASIH DIPANTAU", "⏳", active_list)
+
+        settled = len(tp2_list) + len(tp1_list) + len(sl_list)
+        win = len(tp2_list) + len(tp1_list)
+        wr = (win / settled * 100) if settled > 0 else 0
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        lines.append(f"✅ Win: {win} | ❌ Loss: {len(sl_list)} | WR: {wr:.0f}%")
+        lines.append(f"⏳ Active: {len(active_list)}")
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+        send_telegram_message("\n".join(lines))
+        logger.info("[OutcomeChecker] Rekap evaluasi 3 hari berhasil dikirim")
+
+    except Exception as e:
+        logger.warning(f"[OutcomeChecker] Gagal kirim rekap 3 hari: {e}")
+
+
 def run_outcome_check() -> int:
     """
     Main function: evaluasi semua sinyal pending, update DB,
@@ -425,8 +505,9 @@ def run_outcome_check() -> int:
 
             trading_days = _count_trading_days(signal_date, today)
 
-            # Belum cukup 1 hari trading — lewati
-            if trading_days < 1:
+            # Tetap evaluasi di hari yang sama (trading_days == 0)
+            # supaya TP/SL intraday di hari sinyal bisa terdeteksi.
+            if trading_days < 0:
                 continue
 
             # Fetch OHLC data
@@ -466,6 +547,7 @@ def run_outcome_check() -> int:
                         logger.warning(f"[OutcomeChecker] Gagal kirim notif {ticker}: {e}")
 
         conn.commit()
+        _send_recent_3d_summary(conn)
         logger.info(
             f"[OutcomeChecker] Selesai: {evaluated} diupdate, "
             f"{notified} notifikasi dikirim"
