@@ -343,16 +343,10 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
     return signals
 
 
-def filter_all_current_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]]:
+def filter_all_current_signals(results: Dict[str, ScanResult], state_manager=None) -> Dict[str, List[ScanResult]]:
     """
-    Filter stocks by their CURRENT status for evening recap (v5).
-    
-    Categories:
-    - strong_buy: Score >= BUY_THRESHOLD, Bullish, Trending
-    - accumulation: Is accumulation signal
-    - bullish: Currently bullish with good score  
-    - early_entry: Early entry signal detected
-    - bull_div: Bullish divergence detected
+    Filter stocks by their CURRENT status for recap (v5.1).
+    Excludes signals that already hit TP (trade is done).
     """
     categories = {
         'strong_buy': [],
@@ -361,34 +355,35 @@ def filter_all_current_signals(results: Dict[str, ScanResult]) -> Dict[str, List
         'early_entry': [],
         'bull_div': []
     }
-    
+
+    def _is_done(ticker, signal_type):
+        if state_manager is None:
+            return False
+        return state_manager.is_signal_done(ticker, signal_type)
+
     for ticker, result in results.items():
-        # Only process liquid stocks
         if result.avg_turnover_5d < MIN_DAILY_TURNOVER:
             continue
-        
-        # Strong Buy: Score >= BUY_THRESHOLD, Bullish, Trending
+
         if result.is_bullish and result.score >= BUY_THRESHOLD and result.is_trending:
-            categories['strong_buy'].append(result)
-        # Accumulation: actual ACC signal
+            if not _is_done(ticker, 'strong_buy'):
+                categories['strong_buy'].append(result)
         elif result.is_accumulation:
-            categories['accumulation'].append(result)
-        # Bullish: Currently bullish with good score
+            if not _is_done(ticker, 'accumulation'):
+                categories['accumulation'].append(result)
         elif result.is_bullish and result.score >= ACCUMULATE_THRESHOLD:
-            categories['bullish'].append(result)
-        
-        # Early Entry (can overlap)
-        if result.is_early_entry:
+            if not _is_done(ticker, 'strong_buy') and not _is_done(ticker, 'accumulation'):
+                categories['bullish'].append(result)
+
+        if result.is_early_entry and not _is_done(ticker, 'early_entry'):
             categories['early_entry'].append(result)
-        
-        # Bullish Divergence (can overlap)
-        if result.is_bull_div:
+
+        if result.is_bull_div and not _is_done(ticker, 'bull_div'):
             categories['bull_div'].append(result)
-    
-    # Sort by score (highest first)
+
     for key in categories:
         categories[key] = sorted(categories[key], key=lambda x: x.score, reverse=True)
-    
+
     return categories
 
 

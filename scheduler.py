@@ -14,7 +14,7 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from main import run_scan, is_trading_hours, is_market_open_time, is_market_close_time, run_full_recap
+from main import run_scan, is_trading_hours, is_market_open_time, is_market_close_time, run_full_recap, run_daily_evaluation
 from database.state_manager import StateManager
 from notifications.telegram_bot import send_startup_message, send_telegram_message
 
@@ -87,17 +87,21 @@ def scheduled_scan():
         return
 
     # ── Outcome Check 16:30 WIB ────────────────────────────────
-    # Jalankan 30 menit setelah market close agar data OHLC hari ini final
+    # Evaluasi TP/SL semua sinyal aktif + learning outcome check
     if (now.hour == 16 and now.minute >= 30 and
             now.weekday() < 5 and not outcome_check_done):
-        logger.info("[OutcomeChecker] Menjalankan evaluasi sinyal (16:30 WIB)...")
+        logger.info("[Evaluation] Menjalankan evaluasi sinyal harian (16:30 WIB)...")
+        try:
+            run_daily_evaluation(state_manager)
+        except Exception as e:
+            logger.error(f"[Evaluation] Error: {e}")
         try:
             if _LEARNING_OK:
                 n = run_outcome_check()
                 logger.info(f"[OutcomeChecker] Selesai: {n} sinyal dievaluasi")
-            outcome_check_done = True
         except Exception as e:
             logger.error(f"[OutcomeChecker] Error: {e}")
+        outcome_check_done = True
         return
     
     # Outside trading hours — skip

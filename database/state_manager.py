@@ -190,3 +190,133 @@ class StateManager:
         today = datetime.now().strftime('%Y-%m-%d')
         if self.daily_alerts.get('date') != today:
             self._reset_daily_alerts()
+
+    # ============================================
+    # SIGNAL TRACKER - Track TP/SL outcomes
+    # ============================================
+
+    _TRACKER_FILE = "database/signal_tracker.json"
+
+    def _load_tracker(self) -> dict:
+        try:
+            if os.path.exists(self._TRACKER_FILE):
+                with open(self._TRACKER_FILE, 'r') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading signal tracker: {e}")
+        return {}
+
+    def _save_tracker(self, tracker: dict):
+        try:
+            with open(self._TRACKER_FILE, 'w') as f:
+                json.dump(tracker, f, indent=2, default=str)
+        except Exception as e:
+            logger.error(f"Error saving signal tracker: {e}")
+
+    def track_signal(self, result, signal_type: str):
+        """Record a new signal with entry price, TP1, TP2, SL for outcome tracking."""
+        tracker = self._load_tracker()
+        key = f"{result.ticker}_{signal_type}"
+        if key in tracker and tracker[key].get('status') == 'ACTIVE':
+            return
+        sl_price = result.price * 0.95
+        tracker[key] = {
+            'ticker': result.ticker,
+            'signal_type': signal_type,
+            'entry_price': result.price,
+            'tp1': getattr(result, 'tp1', 0),
+            'tp2': getattr(result, 'tp2', 0) or getattr(result, 'tp_swing', 0),
+            'sl': sl_price,
+            'alert_date': datetime.now().strftime('%Y-%m-%d'),
+            'alert_time': datetime.now().strftime('%H:%M'),
+            'status': 'ACTIVE',
+            'hit_price': None,
+            'hit_date': None,
+            'score': result.score,
+            'high_since_entry': result.price,
+        }
+        self._save_tracker(tracker)
+        logger.info(f"[Tracker] Recorded {signal_type} for {result.ticker} "
+                     f"@ {result.price:.0f} | TP1={getattr(result, 'tp1', 0):.0f} SL={sl_price:.0f}")
+
+    def evaluate_signals(self, current_prices: dict) -> dict:
+        """
+        Evaluate all ACTIVE signals against current prices.
+        Returns dict with lists: tp1_hit, tp2_hit, sl_hit, still_active.
+        """
+        tracker = self._load_tracker()
+        today = datetime.now().strftime('%Y-%m-%d')
+
+        outcome = {'tp1_hit': [], 'tp2_hit': [], 'sl_hit': [], 'active': []}
+
+        for key, sig in list(tracker.items()):
+            if sig['status'] != 'ACTIVE':
+                continue
+
+            ticker = sig['ticker']
+            price = current_prices.get(ticker)
+            if price is None:
+                outcome['active'].append(sig)
+                continue
+
+            if price > sig.get('high_since_entry', sig['entry_price']):
+                sig['high_since_entry'] = price
+
+            tp1 = sig.get('tp1', 0)
+            tp2 = sig.get('tp2', 0)
+            sl = sig.get('sl', 0)
+
+            if tp2 and price >= tp2:
+                sig['status'] = 'TP2_HIT'
+                sig['hit_price'] = price
+                sig['hit_date'] = today
+                outcome['tp2_hit'].append(sig)
+            elif tp1 and price >= tp1:
+                sig['status'] = 'TP1_HIT'
+                sig['hit_price'] = price
+                sig['hit_date'] = today
+                outcome['tp1_hit'].append(sig)
+            elif sl and price <= sl:
+                sig['status'] = 'SL_HIT'
+                sig['hit_price'] = price
+                sig['hit_date'] = today
+                outcome['sl_hit'].append(sig)
+            else:
+                outcome['active'].append(sig)
+
+        self._save_tracker(tracker)
+        return outcome
+
+    def is_signal_done(self, ticker: str, signal_type: str) -> bool:
+        """Check if a signal already hit TP1/TP2 (i.e. trade is done)."""
+        tracker = self._load_tracker()
+        key = f"{ticker}_{signal_type}"
+        sig = tracker.get(key)
+        if sig is None:
+            return False
+        return sig['status'] in ('TP1_HIT', 'TP2_HIT')
+
+    def get_active_signals(self) -> list:
+        """Return all signals with status ACTIVE."""
+        tracker = self._load_tracker()
+        return [s for s in tracker.values() if s['status'] == 'ACTIVE']
+
+    def cleanup_old_signals(self, max_age_days: int = 30):
+        """Remove resolved signals older than max_age_days."""
+        tracker = self._load_tracker()
+        today = datetime.now()
+        to_remove = []
+        for key, sig in tracker.items():
+            if sig['status'] == 'ACTIVE':
+                continue
+            try:
+                hit_date = datetime.strptime(sig.get('hit_date', sig['alert_date']), '%Y-%m-%d')
+                if (today - hit_date).days > max_age_days:
+                    to_remove.append(key)
+            except (ValueError, TypeError):
+                pass
+        for key in to_remove:
+            del tracker[key]
+        if to_remove:
+            self._save_tracker(tracker)
+            logger.info(f"[Tracker] Cleaned up {len(to_remove)} old signals")

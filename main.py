@@ -159,10 +159,11 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         messages_sent = send_all_alerts(new_signals)
         logger.info(f"Sent {messages_sent} alert messages")
         
-        # Mark these stocks as alerted for today
+        # Mark these stocks as alerted for today + track for TP/SL evaluation
         for signal_type, signal_list in new_signals.items():
             for r in signal_list:
                 state_manager.add_alerted_stock(signal_type, r.ticker)
+                state_manager.track_signal(r, signal_type)
 
         # ── Learning: catat sinyal ke DB ──────────────────────────────
         if _LEARNING_IMPORTS_OK:
@@ -233,8 +234,8 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     del stock_data
     gc.collect()
     
-    # Get ALL current matching signals (not filtering for new-only)
-    all_current_signals = filter_all_current_signals(results)
+    # Get ALL current matching signals, excluding those that already hit TP/SL
+    all_current_signals = filter_all_current_signals(results, state_manager=state_manager)
     
     # Count total signals
     total_signals = sum(len(v) for v in all_current_signals.values())
@@ -261,6 +262,70 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     state_manager.save()
     
     logger.info(f"{recap_type} recap complete!")
+    logger.info("=" * 50)
+
+
+def run_daily_evaluation(state_manager: StateManager):
+    """
+    Evaluate all tracked signals at 16:30 WIB.
+    Check which signals hit TP1, TP2, or SL today, and send performance recap.
+    """
+    logger.info("=" * 50)
+    logger.info("DAILY SIGNAL EVALUATION (16:30)")
+    logger.info("=" * 50)
+
+    active_signals = state_manager.get_active_signals()
+    if not active_signals:
+        logger.info("No active signals to evaluate.")
+        return
+
+    tickers_needed = list(set(s['ticker'] for s in active_signals))
+    logger.info(f"Evaluating {len(active_signals)} active signals across {len(tickers_needed)} tickers...")
+
+    from core.data_fetcher import fetch_multiple_stocks
+    stock_data = fetch_multiple_stocks(tickers_needed, period='5d', interval='1d')
+
+    current_prices = {}
+    high_prices = {}
+    for ticker, df in stock_data.items():
+        if df is not None and len(df) > 0:
+            current_prices[ticker] = df['close'].iloc[-1]
+            high_prices[ticker] = df['high'].iloc[-1]
+
+    for s in active_signals:
+        ticker = s['ticker']
+        if ticker in high_prices:
+            intraday_high = high_prices[ticker]
+            if intraday_high > s.get('high_since_entry', s['entry_price']):
+                current_prices[ticker] = max(current_prices.get(ticker, 0), intraday_high)
+
+    eval_prices = {}
+    for s in active_signals:
+        ticker = s['ticker']
+        if ticker in high_prices and ticker in current_prices:
+            tp1 = s.get('tp1', 0)
+            tp2 = s.get('tp2', 0)
+            if (tp1 and high_prices[ticker] >= tp1) or (tp2 and high_prices[ticker] >= tp2):
+                eval_prices[ticker] = high_prices[ticker]
+            else:
+                sl = s.get('sl', 0)
+                if sl and current_prices[ticker] <= sl:
+                    eval_prices[ticker] = current_prices[ticker]
+                else:
+                    eval_prices[ticker] = current_prices[ticker]
+        elif ticker in current_prices:
+            eval_prices[ticker] = current_prices[ticker]
+
+    outcome = state_manager.evaluate_signals(eval_prices)
+
+    state_manager.cleanup_old_signals(max_age_days=30)
+
+    from notifications.telegram_bot import send_evaluation_message
+    send_evaluation_message(outcome)
+
+    logger.info(f"Evaluation complete: {len(outcome['tp1_hit'])} TP1, "
+                 f"{len(outcome['tp2_hit'])} TP2, {len(outcome['sl_hit'])} SL, "
+                 f"{len(outcome['active'])} still active")
     logger.info("=" * 50)
 
 
