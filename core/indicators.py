@@ -59,7 +59,7 @@ def calculate_rsi(df: pd.DataFrame, period: int = RSI_PERIOD) -> pd.DataFrame:
 def calculate_stochastic_rsi(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate Stochastic RSI (matching Pine Script)"""
     if 'rsi' not in df.columns:
-        df = calculate_rsi(df)
+        calculate_rsi(df)
 
     lowest_rsi = df['rsi'].rolling(window=STOCH_PERIOD).min()
     highest_rsi = df['rsi'].rolling(window=STOCH_PERIOD).max()
@@ -96,7 +96,7 @@ def calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
     minus_dm = np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0)
 
     if 'atr' not in df.columns:
-        df = calculate_atr(df, period)
+        calculate_atr(df, period)
 
     df['plus_di']  = 100 * (pd.Series(plus_dm,  index=df.index).rolling(window=period).mean() / df['atr'])
     df['minus_di'] = 100 * (pd.Series(minus_dm, index=df.index).rolling(window=period).mean() / df['atr'])
