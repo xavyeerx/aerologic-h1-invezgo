@@ -119,7 +119,7 @@ def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str
         results.update(batch_results)
 
         fetched_so_far = len(results)
-        logger.info(f"Chunk {idx + 1}/{total_chunks} done | "
+        logger.debug(f"Chunk {idx + 1}/{total_chunks} done | "
                      f"Got {len(batch_results)}/{len(chunk)} | "
                      f"Total: {fetched_so_far}/{total}")
 
