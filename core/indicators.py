@@ -277,10 +277,8 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
       +1 OBV bullish
       +1 near support level
     """
-    df = df.copy()
-
     if 'rsi' not in df.columns:
-        df = calculate_rsi(df)
+        calculate_rsi(df)
 
     n = len(df)
     bull_div = np.zeros(n, dtype=bool)
@@ -436,10 +434,8 @@ def calculate_targets(df: pd.DataFrame) -> pd.DataFrame:
       - Jika resistance di luar range (terlalu dekat atau terlalu jauh),
         gunakan fallback 2.5×ATR agar tetap masuk akal
     """
-    df = df.copy()
-
     if 'atr' not in df.columns:
-        df = calculate_atr(df)
+        calculate_atr(df)
 
     close = df['close']
     atr   = df['atr']
