@@ -240,7 +240,7 @@ def main():
             # Kalau masih perlu tidur lebih dari 5 detik → tidur dulu
             if secs > 5:
                 smart_sleep_until(target, label)
-                continue
+                # Jangan continue — biarkan flow lanjut ke eksekusi event
 
             # ─── Eksekusi event ───────────────────────────────────────
             now = datetime.now(WIB)
