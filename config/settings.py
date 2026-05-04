@@ -3,6 +3,12 @@
 # ============================================
 
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# Load repo-root .env for local dev (does not override existing env vars)
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
