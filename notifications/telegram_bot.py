@@ -3,7 +3,7 @@
 # ============================================
 
 import requests
-from typing import List
+from typing import List, Dict, Any
 import logging
 from datetime import datetime
 import pytz
@@ -234,6 +234,80 @@ def format_early_entry_message(results: List) -> str:
     return "\n".join(lines)
 
 
+def format_chart_pattern_morning_message(items: List[Dict[str, Any]], test_mode: bool = False) -> str:
+    """
+    Digest pola chart bullish (scan reviu TF daily, umumnya setelah market close).
+    items: [{'ticker', 'pattern_key', 'label', 'price', 'change_pct', 'vol_vs_avg', 'rsi14'} ...]
+    """
+    if not items:
+        return ""
+
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for it in sorted(items, key=lambda x: (x["pattern_key"], x["ticker"])):
+        grouped.setdefault(it["pattern_key"], []).append(it)
+
+    badge = ""
+    if test_mode:
+        badge = (
+            "🧪 <b>MODE UJI TELEGRAM</b> • tidak menyentuh dedup / kuota sekali-scan harian •"
+        )
+
+    lines = [
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+    if badge:
+        lines.extend([badge, ""])
+    lines.extend(
+        [
+            f"⏰ {get_current_time_wib()}",
+            "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
+            "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
+            "<i>Heuristik otomatis (bukan realtime). Candle harian yang sudah close (setelah bell = hari tersebut).</i>",
+            "",
+        ]
+    )
+
+    for pkey in sorted(grouped.keys()):
+        rows = grouped[pkey]
+        label = rows[0].get("label", pkey)
+        lines.append(f"<b>{label}</b>")
+        for r in rows:
+            t = str(r["ticker"]).replace(".JK", "")
+            ch = r.get("change_pct", 0.0)
+            chs = f"+{ch:.1f}%" if ch >= 0 else f"{ch:.1f}%"
+            vm = r.get("vol_vs_avg", 1.0)
+            rsi = r.get("rsi14")
+            rsi_txt = f" • RSI14 {rsi:.1f}" if rsi is not None else ""
+            lines.append(
+                f"• <b>{t}</b> | {r['price']:,.0f} ({chs}) | Vol {vm:.2f}×{rsi_txt}"
+            )
+        lines.append("")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    lines.append(f"Total: {len(items)} baris pola (bisa 1 ticker → beberapa pola)")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    return "\n".join(lines)
+
+
+def send_chart_pattern_morning_digest(items: List[Dict[str, Any]], test_mode: bool = False) -> bool:
+    msg = format_chart_pattern_morning_message(items, test_mode=test_mode)
+    if not msg:
+        if test_mode:
+            nm = (
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "📐 <b>CHART PATTERNS — UJI TELEGRAM (TF-D)</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+                "🧪 <i>Mode uji • tidak ada baris pola yang lolos filter.</i>\n"
+                f"⏰ {get_current_time_wib()}"
+            )
+            return send_telegram_message(nm)
+        return False
+    return send_telegram_message(msg)
+
+
 def send_all_alerts(signals: dict) -> int:
     """
     Send all alert messages (v5)
@@ -281,6 +355,7 @@ Scan interval: setiap 1 menit
 Trading hours: 08:45 - 16:00 WIB
 
 📊 Alerts:
+• 📐 Chart Patterns — reviu harian (~20:00 WIB setelah pasar tutup, terpisah dari sinyal utama)
 • 🚀 Strong Buy (confirmed breakout)
 • 🔵 Accumulation
 • 🔀 Bullish Divergence

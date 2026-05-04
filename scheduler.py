@@ -4,17 +4,19 @@
 # Strategi: tidur PANJANG di luar jam trading, bangun TEPAT saat dibutuhkan.
 #
 # Jadwal utama (hari kerja / Senin–Jumat):
-#   08:45 → Opening recap
+#   20:00 → alert pola chart TF-D (1×, jendela singkat; lewat = skip hari ini)
+#   08:40 → Pre-wake sebelum recap (Senin ±19:55 juga pre-wake jelang slot chart malam)
+#   08:45 → Opening recap (tidak lagi mengirit pola chart di sini)
 #   08:46 – 15:59 → Scan setiap 1 menit
 #   16:00 → Closing recap
 #   16:30 → Outcome check / evaluasi harian
 #   Selain itu → tidur hingga waktu event berikutnya
 #
-# Akhir pekan (Sabtu & Minggu):
-#   → Tidur sepanjang hari, bangun Senin 08:40
+# Akhir pekan:
+#   → Tidur hingga Senin ±19:55 (pre-wake chart malam)
 #
-# Di luar jam trading (17:01 – 08:44):
-#   → Tidur hingga 08:40 hari kerja berikutnya
+# Di luar sesi rutin scanner:
+#   → Tidur hingga event berikutnya (20:00 pol chart / dll.)
 
 import time
 import logging
@@ -29,9 +31,17 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 WIB = pytz.timezone('Asia/Jakarta')
 
+from config.settings import (
+    CHART_PATTERN_ALERT_HOUR,
+    CHART_PATTERN_ALERT_MINUTE,
+    CHART_PATTERN_EXECUTION_WINDOW_MINUTES,
+)
+
 from main import (
     run_scan,
-    run_full_recap, run_daily_evaluation,
+    run_full_recap,
+    run_daily_evaluation,
+    run_morning_chart_pattern_scan,
 )
 from database.state_manager import StateManager
 from notifications.telegram_bot import send_startup_message, send_telegram_message
@@ -65,11 +75,11 @@ logger = logging.getLogger(__name__)
 # Helper: jadwal hari ini (jam WIB sebagai int tuple)
 # ─────────────────────────────────────────────
 
-OPEN_HOUR,  OPEN_MIN   = 8,  45   # Opening recap
+OPEN_HOUR,  OPEN_MIN   = 8,  45   # Opening recap / market open
 CLOSE_HOUR, CLOSE_MIN  = 16,  0   # Closing recap
 EVAL_HOUR,  EVAL_MIN   = 16, 30   # Outcome check
 SCAN_INTERVAL_SEC      = 60       # Scan tiap 1 menit saat market buka
-PRE_WAKE_MIN           = 5        # Bangun 5 menit sebelum market buka
+PRE_WAKE_MIN           = 5        # Bangun beberapa menit sebelum event pagi
 
 
 def _today_at(hour: int, minute: int, tz=WIB) -> datetime:
@@ -123,49 +133,75 @@ def smart_sleep_until(target: datetime, label: str):
 # Logika utama
 # ─────────────────────────────────────────────
 
-def next_event_sleep(now: datetime, state: dict) -> tuple[datetime, str]:
+def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[datetime, str]:
     """
     Tentukan event berikutnya dan kembalikan (target_datetime, label).
     state berisi flag: recap_open_done, recap_close_done, eval_done.
     """
     weekday = now.weekday()  # 0=Senin … 4=Jumat, 5=Sabtu, 6=Minggu
 
-    # ── Akhir pekan → tidur hingga Senin 08:40 ──────────────────────
+    chart_at = _today_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
+    chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
+    pre_open = _today_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)  # 08:40
+    market_open = _today_at(OPEN_HOUR, OPEN_MIN, tz=WIB)
+    market_close = _today_at(CLOSE_HOUR, CLOSE_MIN, tz=WIB)
+    eval_time = _today_at(EVAL_HOUR, EVAL_MIN, tz=WIB)
+    chart_evening = chart_at >= market_close
+
+    # ── Akhir pekan → tidur hingga Senin (pre-wake sebelum slot chart) ─
     if weekday >= 5:
-        target = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN)
-        return target, "Morning Pre-wake (Senin)"
+        mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
+        target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
+        return target, f"Pre-wake Senin (chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d})"
 
-    # ── Sebelum jam market ────────────────────────────────────────────
-    pre_wake = _today_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN)  # 08:40
-    market_open = _today_at(OPEN_HOUR, OPEN_MIN)              # 08:45
+    need_chart = not sm.morning_chart_patterns_already_scanned_today()
 
-    if now < pre_wake:
-        return pre_wake, "Pre-wake (08:40)"
+    # ── Slot pagi (sebelum buka): pola chart punya prioritas pertama (jarang dipakai jika jam chart malam)
+    if need_chart and not chart_evening:
+        if now < chart_at:
+            return chart_at, "Chart patterns TF-D"
+        if now < chart_end:
+            urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
+            return urgent, "Chart patterns (jendela eksekusi)"
+        urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
+        return urgent, "Chart patterns (lewat jendela — tandai selesai)"
 
-    # ── Market open recap (08:45) ─────────────────────────────────────
+    # ── Sebelum recap 08:45 ──
+    if now < pre_open:
+        return pre_open, "Pre-wake (08:40)"
+
+    # ── Opening recap 08:45 ───────────────────────────────────────────
     if now < market_open and not state['recap_open_done']:
         return market_open, "Opening Recap (08:45)"
 
-    # ── Sesi trading 08:46 – 15:59 ───────────────────────────────────
-    market_close = _today_at(CLOSE_HOUR, CLOSE_MIN)
+    # ── Sesi trading 08:46 – 15:59 ────────────────────────────────────
     if market_open <= now < market_close:
-        # Scan berikutnya = sekarang + 1 menit (bulat ke menit)
         next_scan = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         return next_scan, "Scan (1-menit)"
 
-    # ── Market close recap (16:00) ────────────────────────────────────
-    eval_time = _today_at(EVAL_HOUR, EVAL_MIN)
+    # ── Market close 16:00 ────────────────────────────────────────────
     if market_close <= now < eval_time and not state['recap_close_done']:
         return market_close, "Closing Recap (16:00)"
 
-    # ── Outcome check (16:30) ─────────────────────────────────────────
+    # ── Outcome 16:30 ─────────────────────────────────────────────────
     if now >= market_close and not state['eval_done']:
         target = max(now, eval_time)
         return target, "Outcome Check (16:30)"
 
-    # ── Semua selesai hari ini → tidur hingga besok 08:40 ────────────
-    target = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN)
-    return target, "Morning Pre-wake (besok)"
+    # ── Chart TF-D malam (setelah tutup; candle = hari perdagangan yang sama) ─
+    if need_chart and chart_evening and now >= market_close:
+        if now < chart_at:
+            return chart_at, f"Chart patterns TF-D ({CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d})"
+        if now < chart_end:
+            urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
+            return urgent, "Chart patterns (jendela malam)"
+        urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
+        return urgent, "Chart patterns (lewat jendela — tandai selesai)"
+
+    # ── Selesai → besok pre-wake chart ────────────────────────────────
+    mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
+    target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
+    return target, f"Pre-wake besok (chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d})"
 
 
 def main():
@@ -179,11 +215,14 @@ def main():
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")
     logger.info("=" * 50)
-    logger.info("Opening recap   : 08:45 WIB")
+    logger.info(
+        f"Chart patterns TF-D: {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB (terpisah)"
+    )
+    logger.info("Opening recap        : 08:45 WIB")
     logger.info("Scan interval   : 1 menit (08:46–15:59)")
     logger.info("Closing recap   : 16:00 WIB")
     logger.info("Outcome check   : 16:30 WIB")
-    logger.info("Akhir pekan     : Server idle (tidur hingga Senin 08:40)")
+    logger.info("Akhir pekan     : Server idle (tidur hingga Senin pre-wake chart)")
     logger.info("Luar jam trading: Tidur panjang (tidak polling)")
     logger.info(f"Learning system : {'Aktif' if _LEARNING_OK else 'Tidak aktif (no DB)'}")
     logger.info("=" * 50)
@@ -229,12 +268,16 @@ def main():
 
             # ── Akhir pekan: idle ─────────────────────────────────────
             if weekday >= 5:
-                target = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN)
-                smart_sleep_until(target, "Senin pagi (08:40)")
+                mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
+                target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
+                smart_sleep_until(
+                    target,
+                    f"Senin pre-wake chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}",
+                )
                 continue
 
             # ── Tentukan event berikutnya & tidur ─────────────────────
-            target, label = next_event_sleep(now, state)
+            target, label = next_event_sleep(now, state, state_manager)
             secs = seconds_until(target)
 
             # Kalau masih perlu tidur lebih dari 5 detik → tidur dulu
@@ -244,21 +287,52 @@ def main():
 
             # ─── Eksekusi event ───────────────────────────────────────
             now = datetime.now(WIB)
+            weekday = now.weekday()
 
-            # Opening recap (08:45)
             market_open  = _today_at(OPEN_HOUR, OPEN_MIN)
             market_close = _today_at(CLOSE_HOUR, CLOSE_MIN)
             eval_time    = _today_at(EVAL_HOUR,  EVAL_MIN)
 
+            chart_at = _today_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE)
+            chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
+
+            # Pola chart: jendela singkat di CHART_PATTERN_*; lewat = tidak catch-up
+            if weekday < 5 and not state_manager.morning_chart_patterns_already_scanned_today():
+                if chart_at <= now < chart_end:
+                    logger.info(
+                        f"📐 Alert pola chart TF-D (slot "
+                        f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}, "
+                        "terpisah dari sinyal utama)..."
+                    )
+                    try:
+                        run_morning_chart_pattern_scan(state_manager)
+                    except Exception as e2:
+                        logger.error(f"Chart patterns error: {e2}")
+                        send_telegram_message(
+                            f"⚠️ Chart Patterns ({CHART_PATTERN_ALERT_HOUR:02d}:"
+                            f"{CHART_PATTERN_ALERT_MINUTE:02d}): {e2}"
+                        )
+                        state_manager.mark_morning_chart_patterns_scan_complete()
+                    continue
+                if now >= chart_end:
+                    logger.info(
+                        f"📐 Chart patterns: lewat jendela "
+                        f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} "
+                        "— tidak dijalankan hari ini."
+                    )
+                    state_manager.mark_morning_chart_patterns_scan_complete()
+                    continue
+
+            # Opening recap (08:45)
             if (now >= market_open and now < market_open + timedelta(minutes=2)
                     and not state['recap_open_done']):
                 logger.info("🔔 Market open! Menjalankan opening recap...")
                 try:
                     run_full_recap(state_manager, recap_type="OPENING")
-                    state['recap_open_done'] = True
                 except Exception as e:
                     logger.error(f"Opening recap error: {e}")
                     send_telegram_message(f"⚠️ Opening Recap Error: {e}")
+                state['recap_open_done'] = True
                 continue
 
             # Scan rutin 08:46 – 15:59

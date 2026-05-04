@@ -18,7 +18,7 @@ from config.stocks_list import get_all_stocks, get_stock_count
 from core.data_fetcher import fetch_multiple_stocks
 from core.scanner import scan_all_stocks, filter_signals, filter_all_current_signals, has_any_signal
 from database.state_manager import StateManager
-from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_morning_recap_message
+from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_morning_recap_message, send_chart_pattern_morning_digest
 
 # ── Learning system (graceful degradation jika DB tidak ada) ───────────
 try:
@@ -125,7 +125,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     
     # Reset daily alerts if new day
     state_manager.reset_daily_if_new_day()
-    
+
     # Scan all stocks
     logger.info("Analyzing stocks...")
     results = scan_all_stocks(stock_data, previous_states)
@@ -200,6 +200,126 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     logger.info("=" * 50)
     
     return summary
+
+
+def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None, telegram_test_mode: bool = False):
+    """
+    Deteksi pola chart bullish TF daily pada **bar terakhir seri** (= sesi H setelah pasar tutup;
+    tidak memaksa H-1 seperti skenario digest pagi). Dipanggil maksimal sekali per hari —
+    scheduler slot reviu ~20:00 WIB (jendela singkat). Fetch memakai DATA_PERIOD (mis. 90d).
+    Jika stock_data hasil fetch sudah ada (mis. dari run_scan), dipakai lagi agar tidak fetch ganda.
+
+    telegram_test_mode: jalankan lagi + kirim Telegram tanpa blokir "sudah scan hari ini" dan tanpa tulis dedup pola
+                         (uji manual: ``python main.py morning-patterns --telegram-test``).
+    """
+    from core.data_fetcher import fetch_multiple_stocks
+    from core.chart_patterns import (
+        detect_bullish_chart_patterns,
+        PATTERN_LABELS,
+        CHART_MIN_BARS,
+        passes_chart_alert_quality_filters,
+    )
+
+    state_manager.reset_daily_if_new_day()
+
+    if (
+        not telegram_test_mode
+        and state_manager.morning_chart_patterns_already_scanned_today()
+    ):
+        logger.info("Morning chart patterns: skip — sudah diproses hari ini.")
+        return
+
+    logger.info("=" * 50)
+    logger.info("MORNING CHART PATTERN SCAN (TF-D)" + (" [TELEGRAM TEST]" if telegram_test_mode else ""))
+    logger.info("=" * 50)
+
+    own_fetch = stock_data is None
+    if own_fetch:
+        stocks = get_all_stocks()
+        logger.info(f"Chart patterns: fetching {len(stocks)} tickers ({DATA_INTERVAL})...")
+        stock_data = fetch_multiple_stocks(stocks, period=DATA_PERIOD, interval=DATA_INTERVAL)
+    elif not stock_data:
+        logger.warning("Morning chart patterns: stock_data kosong, skip.")
+        if not telegram_test_mode:
+            state_manager.mark_morning_chart_patterns_scan_complete()
+        return
+
+    if len(stock_data) == 0:
+        logger.warning("Morning chart patterns: tidak ada data, skip.")
+        if not telegram_test_mode:
+            state_manager.mark_morning_chart_patterns_scan_complete()
+        return
+
+    alerts: list = []
+
+    for ticker, df in stock_data.items():
+        if df is None or len(df) < CHART_MIN_BARS:
+            continue
+        try:
+            dx = df.copy()
+            dx["turnover"] = dx["close"] * dx["volume"]
+            avg_to = dx["turnover"].rolling(window=5).mean().iloc[-1]
+            if avg_to < MIN_DAILY_TURNOVER:
+                continue
+
+            flags = detect_bullish_chart_patterns(dx)
+            if not any(flags.values()):
+                continue
+            if not passes_chart_alert_quality_filters(dx):
+                continue
+
+            _rsi_raw = dx["rsi"].iloc[-1]
+            try:
+                rsi14 = float(_rsi_raw)
+                if rsi14 != rsi14:  # NaN
+                    rsi14 = None
+            except (TypeError, ValueError):
+                rsi14 = None
+
+            price = float(dx["close"].iloc[-1])
+            prev_close = float(dx["close"].iloc[-2]) if len(dx) >= 2 else price
+            chg = ((price - prev_close) / prev_close * 100.0) if prev_close > 0 else 0.0
+            avg_vol = float(dx["volume"].rolling(window=VOLUME_PERIOD).mean().iloc[-1])
+            vm = float(dx["volume"].iloc[-1] / avg_vol) if avg_vol > 0 else 1.0
+
+            for pk, fired in flags.items():
+                if not fired:
+                    continue
+                if (not telegram_test_mode) and state_manager.is_chart_combo_alerted(ticker, pk):
+                    continue
+                alerts.append({
+                    "ticker": ticker,
+                    "pattern_key": pk,
+                    "label": PATTERN_LABELS.get(pk, pk),
+                    "price": price,
+                    "change_pct": chg,
+                    "vol_vs_avg": vm,
+                    "rsi14": rsi14,
+                })
+                if not telegram_test_mode:
+                    state_manager.add_chart_pattern_alert(ticker, pk)
+        except Exception as e:
+            logger.warning(f"Chart pattern skip {ticker}: {e}")
+
+    if own_fetch:
+        del stock_data
+        gc.collect()
+
+    if alerts:
+        logger.info(
+            "Morning chart patterns: %s%s alert row(s)"
+            % (len(alerts), " (telegram test)" if telegram_test_mode else " new")
+        )
+        send_chart_pattern_morning_digest(alerts, test_mode=telegram_test_mode)
+    else:
+        logger.info("Morning chart patterns: no new setups")
+        if telegram_test_mode:
+            send_chart_pattern_morning_digest([], test_mode=True)
+
+    if not telegram_test_mode:
+        state_manager.mark_morning_chart_patterns_scan_complete()
+
+    logger.info("=" * 50)
 
 
 def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
@@ -407,4 +527,12 @@ def run_with_notification():
 
 
 if __name__ == "__main__":
-    main()
+    argv = sys.argv[1:]
+    if argv and argv[0] in ("morning-patterns", "morning-charts"):
+        os.makedirs("logs", exist_ok=True)
+        os.makedirs("database", exist_ok=True)
+        _telegram_test = "--telegram-test" in argv or "--test" in argv
+        _sm = StateManager()
+        run_morning_chart_pattern_scan(_sm, telegram_test_mode=_telegram_test)
+    else:
+        main()

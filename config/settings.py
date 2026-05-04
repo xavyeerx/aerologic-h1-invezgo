@@ -7,8 +7,8 @@ import os
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
 # For local development: values below are used as fallback
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8421417558:AAGSldYyzkQ59uxpuPeGIaz8sW_GUtISSq8")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "-1003752913925")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # === SUPERTREND SETTINGS ===
 # Same as Pine Script v3
@@ -77,7 +77,7 @@ HOLD_THRESHOLD = 40
 
 # === SCANNER SETTINGS ===
 SCAN_INTERVAL_MINUTES = 1  # Scan every 1 minute
-DATA_PERIOD = "90d"   # Cukup untuk EMA50, ADX14, Divergence — hemat RAM ~25%
+DATA_PERIOD = "90d"   # Target lebar seri (~90 sesi IDX); Yahoo: tambah buffer kalender di data_fetcher
 DATA_INTERVAL = "1d"  # DAILY candlestick for ALL signals
 
 # === TRADING HOURS (WIB) ===
@@ -96,6 +96,45 @@ DIV_PRICE_MIN_DROP = 0.5        # Min % price lower low to count as meaningful
 DIV_STOCH_MAX_K = 85            # Max Stoch K on signal bar (reject extreme overbought only)
 DIV_FRESHNESS_BARS = 10         # Extra bars beyond pivot lookback (effective = PIVOT_LOOKBACK + this)
 DIV_VOLUME_DECLINE_RATIO = 1.5  # Volume filter relaxed as hard gate, used more for strength scoring
+
+# === DAILY CHART PATTERNS (TF-D heuristic; anchor candle = H untuk reviu malam) ===
+CHART_BASE_LOOKBACK = 22
+CHART_BREAK_BUFFER = 0.00125  # 0.125% di atas tinggi basis / neckline
+
+CHART_CONVERGENCE_LOOKBACK = 34
+CHART_CONVERGENCE_CORR_THRESHOLD = 0.36
+CHART_NARROWING_RATIO = 0.78  # rentang konsolidasi akhir vs awal (~78% tighter)
+CHART_FALLING_WEDGE_CORR_HI = 0.32
+CHART_FALLING_WEDGE_SLOPE_MIN = 8e-6  # jarak relatif (m_l - m_h)/close — highs turun lebih tajam dari lows
+
+CHART_PENNANT_IMPULSE_LOOKBACK = 24
+CHART_PENNANT_IMPULSE_MIN_PCT = 5.5
+CHART_PENNANT_MAX_RANGE_PCT = 4.25  # konsolidasi pennant ± sempit (% dari close)
+
+CHART_TOUCH_ATR_MULT = 0.35
+CHART_HARM_FIB_RATIO = 0.618
+CHART_HARM_ZONE_ATR_MULT = 0.5
+CHART_FALSE_BREAK_LOOKBACK = 16
+
+# Minimal bar OHLC: struktural (lookback tertinggi + amortisasi EMA50), bukan ~70 bar seperti scanner utama —
+# agar IPO / histori Yahoo pendek (mis. FILM) tetap dievaluasi.
+_CHART_PENN_SEG = max(8, CHART_CONVERGENCE_LOOKBACK // 2)
+CHART_MIN_BARS = max(
+    CHART_BASE_LOOKBACK + 3,
+    CHART_CONVERGENCE_LOOKBACK + 3,
+    CHART_PENNANT_IMPULSE_LOOKBACK + _CHART_PENN_SEG + 5,
+    EMA_MEDIUM + 5,
+    CHART_FALSE_BREAK_LOOKBACK + 3,
+    46,
+)
+
+# Alert pola chart TF-D (terpisah dari Strong Buy / Acc / dll) — reviu harian ~setelah market close (candle hari sama)
+CHART_PATTERN_ALERT_HOUR = 20
+CHART_PATTERN_ALERT_MINUTE = 0
+# Hanya dalam menit pertama setelah CHART_PATTERN_ALERT_* job diizinkan jalan; lewat itu skip sampai besok
+CHART_PATTERN_EXECUTION_WINDOW_MINUTES = 2
+
+# Filter kualitas alert pola (TF-D): volume vs MA20, OBV accumulation (RSI hanya ditampilkan di pesan Telegram)
 
 # === LOGIC SETTINGS ===
 MIN_DAILY_TURNOVER = 5_000_000_000  # 5 Miliar (Billion) IDR
