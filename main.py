@@ -359,9 +359,11 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     # Get ALL current matching signals, excluding those that already hit TP/SL
     all_current_signals = filter_all_current_signals(results, state_manager=state_manager)
 
-    # Additional strict filter: only show ACTIVE signals from PostgreSQL tracker
-    # so old/done signals do not appear in morning/evening recap.
-    if _LEARNING_IMPORTS_OK and db_available():
+    # Recap filter mode:
+    # - BROAD  (default): tampilkan semua sinyal current match
+    # - STRICT           : batasi hanya ticker ACTIVE dari DB tracker
+    recap_filter_mode = os.getenv("RECAP_FILTER_MODE", "BROAD").strip().upper()
+    if recap_filter_mode == "STRICT" and _LEARNING_IMPORTS_OK and db_available():
         active_map = get_active_signal_tickers_by_type(lookback_days=14)
         logger.info(
             "[Recap] Active signals from DB: "
@@ -388,6 +390,8 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
         all_current_signals['bullish'] = [
             r for r in all_current_signals['bullish'] if r.ticker in actionable
         ]
+    else:
+        logger.info(f"[Recap] Filter mode: {recap_filter_mode} (tanpa pembatas ACTIVE-only DB)")
     
     # Count total signals
     total_signals = sum(len(v) for v in all_current_signals.values())
@@ -396,9 +400,9 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
         logger.info("No matching signals found in recap scan.")
         return
     
-    # (Dihapus/dimatikan sesuai permintaan: hanya gunakan realtime & end of day recap)
-    # logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
-    # send_morning_recap_message(all_current_signals)
+    if recap_type == "OPENING":
+        logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
+        send_morning_recap_message(all_current_signals)
     
     # If it's market close, also send daily summary
     if recap_type == "CLOSING":
