@@ -148,11 +148,10 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
     eval_time = _today_at(EVAL_HOUR, EVAL_MIN, tz=WIB)
     chart_evening = chart_at >= market_close
 
-    # ── Akhir pekan → tidur hingga Senin (pre-wake sebelum slot chart) ─
+    # ── Akhir pekan → tidur hingga hari kerja berikutnya (pre-open) ─
     if weekday >= 5:
-        mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
-        target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
-        return target, f"Pre-wake Senin (chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d})"
+        next_pre_open = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)
+        return next_pre_open, "Pre-wake hari kerja (08:40)"
 
     need_chart = not sm.morning_chart_patterns_already_scanned_today()
 
@@ -198,10 +197,9 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
         urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
         return urgent, "Chart patterns (lewat jendela — tandai selesai)"
 
-    # ── Selesai → besok pre-wake chart ────────────────────────────────
-    mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
-    target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
-    return target, f"Pre-wake besok (chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d})"
+    # ── Selesai → hari kerja berikutnya pre-open (jangan skip sesi pagi) ─
+    next_pre_open = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)
+    return next_pre_open, "Pre-wake besok (08:40)"
 
 
 def main():
@@ -268,11 +266,10 @@ def main():
 
             # ── Akhir pekan: idle ─────────────────────────────────────
             if weekday >= 5:
-                mon_chart = _next_weekday_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
-                target = mon_chart - timedelta(minutes=PRE_WAKE_MIN)
+                target = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)
                 smart_sleep_until(
                     target,
-                    f"Senin pre-wake chart {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}",
+                    "Hari kerja pre-wake 08:40",
                 )
                 continue
 
