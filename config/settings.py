@@ -137,9 +137,9 @@ CHART_MIN_BARS = max(
     46,
 )
 
-# Alert pola chart TF-D (terpisah dari Strong Buy / Acc / dll) — reviu harian ~setelah market close (candle hari sama)
-CHART_PATTERN_ALERT_HOUR = 20
-CHART_PATTERN_ALERT_MINUTE = 0
+# Alert pola chart TF-D (terpisah dari Strong Buy / Acc / dll) — reviu terjadwal 1× per hari
+CHART_PATTERN_ALERT_HOUR = 15
+CHART_PATTERN_ALERT_MINUTE = 30
 # Hanya dalam menit pertama setelah CHART_PATTERN_ALERT_* job diizinkan jalan; lewat itu skip sampai besok
 CHART_PATTERN_EXECUTION_WINDOW_MINUTES = 2
 
@@ -151,9 +151,8 @@ def _env_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
-# True: deteksi pola chart tiap siklus scan (08:46–15:59), alert baru segera (dedup per ticker|pola per hari).
-# False: hanya digest terjadwal lewat CHART_PATTERN_ALERT_* (setelah tutup).
-CHART_PATTERN_REALTIME = _env_bool("CHART_PATTERN_REALTIME", True)
+# True: deteksi pola chart tiap siklus scan (08:46–15:59). False: hanya slot terjadwal CHART_PATTERN_ALERT_*.
+CHART_PATTERN_REALTIME = _env_bool("CHART_PATTERN_REALTIME", False)
 
 # Filter kualitas alert pola (TF-D): volume vs MA20, OBV accumulation (RSI hanya ditampilkan di pesan Telegram)
 

@@ -4,7 +4,7 @@
 # Strategi: tidur PANJANG di luar jam trading, bangun TEPAT saat dibutuhkan.
 #
 # Jadwal utama (hari kerja / Senin–Jumat):
-#   Pola chart TF-D: default realtime tiap scan (08:46–15:59); atau terjadwal 20:00 jika CHART_PATTERN_REALTIME=0
+#   Pola chart TF-D: terjadwal CHART_PATTERN_ALERT_* (default 15:30); realtime hanya jika CHART_PATTERN_REALTIME=1
 #   08:40 → Pre-wake sebelum recap
 #   08:45 → Opening recap (tidak lagi mengirit pola chart di sini)
 #   08:46 – 15:59 → Scan setiap 1 menit
@@ -16,7 +16,7 @@
 #   → Tidur hingga hari kerja berikutnya pre-wake 08:40
 #
 # Di luar sesi rutin scanner:
-#   → Tidur hingga event berikutnya (20:00 pol chart / dll.)
+#   → Tidur hingga event berikutnya (slot pol chart / dll.)
 
 import time
 import logging

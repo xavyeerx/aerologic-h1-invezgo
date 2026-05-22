@@ -10,7 +10,14 @@ import pytz
 
 import sys
 sys.path.append('..')
-from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BUY_THRESHOLD
+from config.settings import (
+    TELEGRAM_BOT_TOKEN,
+    TELEGRAM_CHAT_ID,
+    BUY_THRESHOLD,
+    CHART_PATTERN_ALERT_HOUR,
+    CHART_PATTERN_ALERT_MINUTE,
+    CHART_PATTERN_REALTIME,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -315,7 +322,7 @@ Scan interval: setiap 1 menit
 Trading hours: 08:45 - 16:00 WIB
 
 📊 Alerts:
-• 📐 Chart Patterns — reviu harian (~20:00 WIB setelah pasar tutup, terpisah dari sinyal utama)
+• 📐 Chart Patterns — {"realtime tiap scan sesi" if CHART_PATTERN_REALTIME else f"reviu terjadwal {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB (1×/hari)"}
 • 🚀 Strong Buy (confirmed breakout)
 • 🔵 Accumulation
 • 🎯 Early Entry (Serok Bawah)
