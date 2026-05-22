@@ -173,14 +173,37 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
-WorkingDirectory=/opt/ihsg-scanner
-ExecStart=/opt/ihsg-scanner/venv/bin/python scheduler.py
+User=anugrahdwikiar
+WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
+ExecStart=/home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
 Restart=always
 RestartSec=10
+KillMode=control-group
+Environment=PYTHONUNBUFFERED=1
 
 [Install]
 WantedBy=multi-user.target
+```
+
+**Penting:** Jangan jalankan `nohup python scheduler.py` bersamaan dengan systemd — itu penyebab 2 proses & alert dobel.
+
+### Jika `ps aux | grep scheduler` masih 2 baris
+
+```bash
+sudo systemctl stop ihsg-scanner
+pkill -f "ihsg-scanner.*scheduler.py" || true
+sleep 3
+ps aux | grep scheduler | grep -v grep
+# harus kosong
+
+sudo systemctl start ihsg-scanner
+ps aux | grep scheduler | grep -v grep
+# harus 1 baris saja
+
+# Cari service/timer lain yang ikut menjalankan scheduler
+systemctl list-units --all | grep -i ihsg
+crontab -l
+grep -r scheduler /etc/systemd/system/
 ```
 
 ### Step 8: Aktifkan Service

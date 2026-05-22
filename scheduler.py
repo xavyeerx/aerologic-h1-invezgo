@@ -24,10 +24,37 @@ import logging.handlers
 import sys
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 import pytz
 
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
+
 # Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _PROJECT_ROOT)
+
+_SCHEDULER_LOCK_PATH = Path(_PROJECT_ROOT) / "database" / ".scheduler.lock"
+_lock_fd = None
+
+
+def acquire_scheduler_lock() -> bool:
+    """Satu instance scheduler per server (cegah alert dobel)."""
+    global _lock_fd
+    _SCHEDULER_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not _HAS_FCNTL:
+        return True
+    _lock_fd = open(_SCHEDULER_LOCK_PATH, "w")
+    try:
+        fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        return False
+    _lock_fd.write(str(os.getpid()))
+    _lock_fd.flush()
+    return True
 
 WIB = pytz.timezone('Asia/Jakarta')
 
@@ -223,6 +250,13 @@ def main():
     # Ensure directories exist
     os.makedirs('logs', exist_ok=True)
     os.makedirs('database', exist_ok=True)
+
+    if not acquire_scheduler_lock():
+        logger.error(
+            "Scheduler lain sudah berjalan (database/.scheduler.lock). "
+            "Hentikan proses duplikat: pkill -f ihsg-scanner.*scheduler.py lalu restart systemd."
+        )
+        sys.exit(1)
 
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")
