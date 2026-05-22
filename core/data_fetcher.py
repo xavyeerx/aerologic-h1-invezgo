@@ -358,10 +358,18 @@ def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> fl
 
     Saat pasar IDX masih buka, Yahoo kadang mengisi bar kemarin dengan close yang
     mendekati harga live (mis. 134 vs 109) sehingga iloc[-2] salah dan % jadi ~0,7%
-    padahal naik >20%. Perbaikan: jika open hari ini jauh dari prev_close tetapi
-    % (close vs prev) terlalu kecil, cari close sesi sebelumnya yang selaras dengan open.
+    padahal naik >20%. Perbaikan: quote previousClose dulu, lalu heuristik open vs bar.
     """
-    if df is None or len(df) < 2:
+    if df is None or len(df) < 1:
+        return 0.0
+
+    current = float(df["close"].iloc[-1])
+    if ticker and current > 0:
+        quoted = _yahoo_previous_close_quote(ticker)
+        if quoted and quoted > 0:
+            return quoted
+
+    if len(df) < 2:
         return 0.0
 
     prior = df.iloc[:-1]
@@ -369,7 +377,6 @@ def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> fl
     if prev_close <= 0:
         return 0.0
 
-    current = float(df["close"].iloc[-1])
     today_open = None
     if "open" in df.columns:
         try:

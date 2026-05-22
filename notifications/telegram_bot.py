@@ -276,6 +276,18 @@ def send_chart_pattern_morning_digest(
     return send_telegram_message(msg)
 
 
+def _dedupe_results_by_ticker(results: List) -> List:
+    seen = set()
+    out = []
+    for r in results:
+        t = getattr(r, "ticker", None)
+        if not t or t in seen:
+            continue
+        seen.add(t)
+        out.append(r)
+    return out
+
+
 def send_all_alerts(signals: dict) -> int:
     """
     Send all alert messages (v5)
@@ -285,19 +297,19 @@ def send_all_alerts(signals: dict) -> int:
     
     # Strong Buy (was bullish_break)
     if signals.get('strong_buy'):
-        msg = format_strong_buy_message(signals['strong_buy'])
+        msg = format_strong_buy_message(_dedupe_results_by_ticker(signals['strong_buy']))
         if send_telegram_message(msg):
             messages_sent += 1
     
     # Accumulation
     if signals.get('accumulation'):
-        msg = format_accumulation_message(signals['accumulation'])
+        msg = format_accumulation_message(_dedupe_results_by_ticker(signals['accumulation']))
         if send_telegram_message(msg):
             messages_sent += 1
     
     # Early Entry (Serok Bawah)
     if signals.get('early_entry'):
-        msg = format_early_entry_message(signals['early_entry'])
+        msg = format_early_entry_message(_dedupe_results_by_ticker(signals['early_entry']))
         if send_telegram_message(msg):
             messages_sent += 1
     

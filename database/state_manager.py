@@ -7,6 +7,13 @@ import os
 from datetime import datetime
 from typing import Dict, Optional, List
 import logging
+import threading
+
+try:
+    import fcntl
+    _HAS_FCNTL = True
+except ImportError:
+    _HAS_FCNTL = False
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +26,10 @@ class StateManager:
         self.daily_alerts_file = "database/daily_alerts.json"
         self.states = {}
         self.daily_alerts = {}
+        self._daily_alerts_lock = threading.Lock()
+        self._alert_lock_file = os.path.join(
+            os.path.dirname(self.daily_alerts_file) or ".", ".alert_send.lock"
+        )
         self._ensure_directory()
         self.load()
         self._load_daily_alerts()
@@ -168,6 +179,29 @@ class StateManager:
             self._reset_daily_alerts()
         
         return ticker in self.daily_alerts.get(signal_type, [])
+
+    def try_claim_daily_alert(self, signal_type: str, ticker: str) -> bool:
+        """
+        Klaim slot alert harian (atomik). True = boleh kirim Telegram sekarang.
+        Mencegah dobel jika dua proses scheduler jalan bersamaan.
+        """
+        with self._daily_alerts_lock:
+            if _HAS_FCNTL:
+                os.makedirs(os.path.dirname(self._alert_lock_file) or ".", exist_ok=True)
+                with open(self._alert_lock_file, "w") as lf:
+                    fcntl.flock(lf, fcntl.LOCK_EX)
+                    try:
+                        self._load_daily_alerts()
+                        if self.is_already_alerted(signal_type, ticker):
+                            return False
+                        self.add_alerted_stock(signal_type, ticker)
+                        return True
+                    finally:
+                        fcntl.flock(lf, fcntl.LOCK_UN)
+            if self.is_already_alerted(signal_type, ticker):
+                return False
+            self.add_alerted_stock(signal_type, ticker)
+            return True
     
     def add_alerted_stock(self, signal_type: str, ticker: str):
         """Mark stock as alerted for this signal type today"""

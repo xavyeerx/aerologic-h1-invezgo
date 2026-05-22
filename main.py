@@ -212,15 +212,19 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # Filter signals
     all_signals = filter_signals(results)
     
-    # Filter for NEW signals only (not already alerted today)
+    # Klaim alert harian sebelum Telegram (cegah dobel jika 2 scheduler / race menit sama)
     new_signals = {}
     for signal_type, signal_list in all_signals.items():
-        new_only = [r for r in signal_list if not state_manager.is_already_alerted(signal_type, r.ticker)]
-        new_signals[signal_type] = new_only
-        
-        # Log signal counts
+        claimed = []
+        for r in signal_list:
+            if state_manager.try_claim_daily_alert(signal_type, r.ticker):
+                claimed.append(r)
+        if claimed:
+            new_signals[signal_type] = claimed
         if len(signal_list) > 0:
-            logger.info(f"  {signal_type}: {len(signal_list)} total, {len(new_only)} new")
+            logger.info(
+                f"  {signal_type}: {len(signal_list)} total, {len(claimed)} claimed to send"
+            )
     
     # Send alerts for NEW signals only (skip if nothing new)
     if has_any_signal(new_signals):
@@ -228,10 +232,8 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         messages_sent = send_all_alerts(new_signals)
         logger.info(f"Sent {messages_sent} alert messages")
         
-        # Mark these stocks as alerted for today + track for TP/SL evaluation
         for signal_type, signal_list in new_signals.items():
             for r in signal_list:
-                state_manager.add_alerted_stock(signal_type, r.ticker)
                 state_manager.track_signal(r, signal_type)
 
         # ── Learning: catat sinyal ke DB ──────────────────────────────
