@@ -276,6 +276,8 @@ def send_chart_pattern_morning_digest(
     test_mode: bool = False,
     realtime: bool = False,
 ) -> bool:
+    if CHART_PATTERN_FORCE_SCHEDULED_ONLY:
+        realtime = False
     msg = format_chart_pattern_morning_message(items, test_mode=test_mode, realtime=realtime)
     if not msg:
         if test_mode:

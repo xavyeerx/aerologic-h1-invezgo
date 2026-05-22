@@ -201,8 +201,6 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     logger.info("Analyzing stocks...")
     results = scan_all_stocks(stock_data, previous_states)
 
-    chart_pattern_new_rows = 0
-
     # ── Ambil kondisi pasar IHSG (untuk learning tracking) ───────────
     regime_info = {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
     if _LEARNING_IMPORTS_OK:
@@ -247,29 +245,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     else:
         logger.info("No NEW signals detected this scan")
 
-    # Pola chart hanya lewat scheduler (15:30) kecuali CHART_PATTERN_REALTIME=true
-    # dan CHART_PATTERN_FORCE_SCHEDULED_ONLY=false di settings/.env
-    if CHART_PATTERN_REALTIME:
-        try:
-            cp_alerts = collect_new_chart_pattern_alerts(
-                stock_data, state_manager, telegram_test_mode=False
-            )
-            if cp_alerts:
-                ok_cp = send_chart_pattern_morning_digest(
-                    cp_alerts, test_mode=False, realtime=True
-                )
-                if ok_cp:
-                    persist_chart_pattern_alert_rows(state_manager, cp_alerts)
-                    chart_pattern_new_rows = len(cp_alerts)
-                    logger.info(
-                        f"Chart patterns (realtime): {chart_pattern_new_rows} new row(s) sent"
-                    )
-                else:
-                    logger.warning(
-                        "Chart patterns (realtime): Telegram send failed; dedup not updated"
-                    )
-        except Exception as e:
-            logger.warning(f"Chart patterns (realtime): {e}")
+    # Pola chart TF-D hanya lewat run_morning_chart_pattern_scan() / scheduler (15:30), bukan run_scan.
 
     del stock_data
     gc.collect()
@@ -287,7 +263,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         'strong_buys': len(new_signals['strong_buy']),
         'accumulations': len(new_signals['accumulation']),
         'early_entries': len(new_signals['early_entry']),
-        'chart_pattern_new_rows': chart_pattern_new_rows,
+        'chart_pattern_new_rows': 0,
         'timestamp': datetime.now(WIB).isoformat()
     }
     
@@ -302,7 +278,7 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
     """
     Deteksi pola chart bullish TF daily pada **bar terakhir seri** (= sesi H setelah pasar tutup;
     tidak memaksa H-1 seperti skenario digest pagi). Dipanggil maksimal sekali per hari —
-    scheduler slot reviu ~20:00 WIB (jendela singkat). Fetch memakai DATA_PERIOD (mis. 90d).
+    scheduler slot terjadwal CHART_PATTERN_ALERT_* (default 15:30 WIB). Fetch memakai DATA_PERIOD (mis. 90d).
     Jika stock_data hasil fetch sudah ada (mis. dari run_scan), dipakai lagi agar tidak fetch ganda.
 
     telegram_test_mode: jalankan lagi + kirim Telegram tanpa blokir "sudah scan hari ini" dan tanpa tulis dedup pola
@@ -311,6 +287,13 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
     from core.data_fetcher import fetch_multiple_stocks
 
     state_manager.reset_daily_if_new_day()
+
+    if not telegram_test_mode and not is_chart_pattern_alert_window():
+        logger.info(
+            "Chart patterns: skip — di luar jendela terjadwal "
+            f"({CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB)."
+        )
+        return
 
     if (
         not telegram_test_mode
