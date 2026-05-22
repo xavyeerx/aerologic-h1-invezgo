@@ -56,9 +56,10 @@ def main():
         if not fired:
             continue
 
-        prev_close = float(dx["close"].iloc[-2]) if len(dx) >= 2 else float(dx["close"].iloc[-1])
+        from core.data_fetcher import compute_session_change_percent
+
         price = float(dx["close"].iloc[-1])
-        chg = ((price - prev_close) / prev_close * 100.0) if prev_close > 0 else 0.0
+        chg = compute_session_change_percent(dx, t)
         avg_vol = float(dx["volume"].rolling(window=VOLUME_PERIOD).mean().iloc[-1])
         vm = float(dx["volume"].iloc[-1] / avg_vol) if avg_vol > 0 else 1.0
 

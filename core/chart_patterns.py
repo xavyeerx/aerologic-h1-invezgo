@@ -29,11 +29,12 @@ from config.settings import (
     CHART_HARM_ZONE_ATR_MULT,
     CHART_FALSE_BREAK_LOOKBACK,
     CHART_MIN_BARS,
+    EMA_FAST,
     EMA_MEDIUM,
     VOLUME_PERIOD,
     ATR_PERIOD,
 )
-from .indicators import calculate_ema, calculate_rsi, calculate_volume_analysis
+from .indicators import calculate_rsi, calculate_sma, calculate_volume_analysis
 
 
 def _atr(df: pd.DataFrame) -> float:
@@ -93,7 +94,6 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
 
     atr = _atr(df)
     vol_mult = _avg_volume_ratio(df)
-    ema50 = float(calculate_ema(df["close"], EMA_MEDIUM).iloc[-1])
 
     # --- Break the base (range breakout) ---
     w = CHART_BASE_LOOKBACK
@@ -173,13 +173,18 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
                 ):
                     out["bullish_pennant"] = vol_mult >= 0.9
 
-    # --- Reject dynamic support (EMA50) ---
-    if atr > 0 and np.isfinite(ema50):
-        touch_band = (CHART_TOUCH_ATR_MULT * atr) / ema50
-        low = float(last["low"])
-        open_ = float(last.get("open", close))
-        touched = low <= ema50 * (1.0 + touch_band) and low >= ema50 * (1.0 - touch_band * 1.5)
-        reclaimed = close > ema50 and close >= open_
+    # --- Reject dynamic support (SMA20 / SMA50): sentuh salah satu, close di atas keduanya ---
+    low = float(last["low"])
+    open_ = float(last.get("open", close))
+    ma20 = float(calculate_sma(df["close"], EMA_FAST).iloc[-1])
+    ma50 = float(calculate_sma(df["close"], EMA_MEDIUM).iloc[-1])
+    if atr > 0 and np.isfinite(ma20) and np.isfinite(ma50) and ma20 > 0 and ma50 > 0:
+        tb20 = (CHART_TOUCH_ATR_MULT * atr) / ma20
+        tb50 = (CHART_TOUCH_ATR_MULT * atr) / ma50
+        touch20 = low <= ma20 * (1.0 + tb20) and low >= ma20 * (1.0 - tb20 * 1.5)
+        touch50 = low <= ma50 * (1.0 + tb50) and low >= ma50 * (1.0 - tb50 * 1.5)
+        touched = touch20 or touch50
+        reclaimed = close > ma20 and close > ma50 and close >= open_
         if touched and reclaimed:
             out["reject_dynamic_support"] = True
 

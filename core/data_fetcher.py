@@ -352,15 +352,85 @@ def get_latest_data(df: pd.DataFrame) -> dict:
     }
 
 
-def get_price_change(df: pd.DataFrame) -> float:
-    """Calculate price change percentage from previous close"""
+def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> float:
+    """
+    Close sesi sebelumnya untuk hitung % perubahan hari ini.
+
+    Saat pasar IDX masih buka, Yahoo kadang mengisi bar kemarin dengan close yang
+    mendekati harga live (mis. 134 vs 109) sehingga iloc[-2] salah dan % jadi ~0,7%
+    padahal naik >20%. Perbaikan: jika open hari ini jauh dari prev_close tetapi
+    % (close vs prev) terlalu kecil, cari close sesi sebelumnya yang selaras dengan open.
+    """
     if df is None or len(df) < 2:
         return 0.0
-    
-    current = df['close'].iloc[-1]
-    previous = df['close'].iloc[-2]
-    
-    if previous == 0:
+
+    prior = df.iloc[:-1]
+    prev_close = float(prior["close"].iloc[-1])
+    if prev_close <= 0:
         return 0.0
-    
-    return ((current - previous) / previous) * 100
+
+    current = float(df["close"].iloc[-1])
+    today_open = None
+    if "open" in df.columns:
+        try:
+            o = float(df["open"].iloc[-1])
+            if o > 0 and o == o:
+                today_open = o
+        except (TypeError, ValueError):
+            pass
+
+    if today_open is None:
+        return prev_close
+
+    gap_open_prev = abs(today_open - prev_close) / prev_close
+    chg_vs_prev = abs((current - prev_close) / prev_close) if prev_close else 0.0
+
+    # Pola bug Yahoo intraday: prev_close ~ harga sekarang, open jauh di bawah/atas
+    if gap_open_prev > 0.12 and chg_vs_prev < 0.025:
+        for i in range(len(prior) - 1, -1, -1):
+            pc = float(prior["close"].iloc[i])
+            if pc > 0 and abs(today_open - pc) / pc <= 0.06:
+                if ticker:
+                    quoted = _yahoo_previous_close_quote(ticker)
+                    if quoted and quoted > 0 and abs(today_open - quoted) / quoted <= 0.06:
+                        return quoted
+                return pc
+        if ticker:
+            repaired = _yahoo_previous_close_quote(ticker)
+            if repaired and repaired > 0:
+                return repaired
+
+    return prev_close
+
+
+def _yahoo_previous_close_quote(ticker: str) -> Optional[float]:
+    """Fallback: previous close dari quote Yahoo (biasanya selaras broker IDX)."""
+    try:
+        fi = yf.Ticker(ticker).fast_info
+        for key in ("regularMarketPreviousClose", "previous_close", "previousClose"):
+            v = getattr(fi, key, None)
+            if v is None and hasattr(fi, "get"):
+                v = fi.get(key)
+            if v is not None:
+                f = float(v)
+                if f > 0:
+                    return f
+    except Exception:
+        pass
+    return None
+
+
+def compute_session_change_percent(df: pd.DataFrame, ticker: Optional[str] = None) -> float:
+    """% perubahan close terakhir vs penutupan sesi sebelumnya (diperbaiki untuk intraday)."""
+    if df is None or len(df) < 1:
+        return 0.0
+    current = float(df["close"].iloc[-1])
+    prev = resolve_previous_close(df, ticker)
+    if prev <= 0:
+        return 0.0
+    return ((current - prev) / prev) * 100.0
+
+
+def get_price_change(df: pd.DataFrame, ticker: Optional[str] = None) -> float:
+    """Calculate price change percentage from previous session close."""
+    return compute_session_change_percent(df, ticker)

@@ -10,7 +10,7 @@ import pytz
 
 import sys
 sys.path.append('..')
-from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, BUY_THRESHOLD
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def format_strong_buy_message(results: List) -> str:
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"💡 <i>Breakout terkonfirmasi + score ≥ {70}</i>")
+    lines.append(f"💡 <i>Bullish + breakout/volume push + score ≥ {BUY_THRESHOLD}</i>")
     lines.append(f"Total: {len(results)} saham strong buy")
     
     return "\n".join(lines)
@@ -134,65 +134,6 @@ def format_accumulation_message(results: List) -> str:
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(f"Total: {len(results)} saham accumulation")
     
-    return "\n".join(lines)
-
-
-def format_bull_div_message(results: List) -> str:
-    """Format Bullish Divergence alert message (v5.1 Enhanced)"""
-    if not results:
-        return ""
-
-    strong = [r for r in results if getattr(r, 'div_grade', '') == 'STRONG']
-    moderate = [r for r in results if getattr(r, 'div_grade', '') == 'MODERATE']
-    weak = [r for r in results if getattr(r, 'div_grade', '') == 'WEAK']
-
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🔀 <b>BULLISH DIVERGENCE</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
-    ]
-
-    if strong:
-        lines.append("🔥 <b>STRONG</b>")
-        for r in strong:
-            ticker_clean = r.ticker.replace('.JK', '')
-            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-            strength = getattr(r, 'div_strength', 0)
-            lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
-            tp_info = _format_tp_info(r)
-            if tp_info:
-                lines.append(tp_info)
-            lines.append("")
-
-    if moderate:
-        lines.append("📊 <b>MODERATE</b>")
-        for r in moderate:
-            ticker_clean = r.ticker.replace('.JK', '')
-            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-            strength = getattr(r, 'div_strength', 0)
-            lines.append(f"🟡 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
-            tp_info = _format_tp_info(r)
-            if tp_info:
-                lines.append(tp_info)
-            lines.append("")
-
-    if weak:
-        lines.append("⚪ <b>WEAK</b>")
-        for r in weak:
-            ticker_clean = r.ticker.replace('.JK', '')
-            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-            lines.append(f"⚪ {ticker_clean} | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f}")
-            lines.append("")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("💡 <i>Pivot low + RSI higher low = potensi reversal</i>")
-    lines.append(f"Total: {len(results)} ({len(strong)} strong, {len(moderate)} moderate, {len(weak)} weak)")
-
     return "\n".join(lines)
 
 
@@ -234,10 +175,15 @@ def format_early_entry_message(results: List) -> str:
     return "\n".join(lines)
 
 
-def format_chart_pattern_morning_message(items: List[Dict[str, Any]], test_mode: bool = False) -> str:
+def format_chart_pattern_morning_message(
+    items: List[Dict[str, Any]],
+    test_mode: bool = False,
+    realtime: bool = False,
+) -> str:
     """
-    Digest pola chart bullish (scan reviu TF daily, umumnya setelah market close).
+    Digest pola chart bullish (TF daily).
     items: [{'ticker', 'pattern_key', 'label', 'price', 'change_pct', 'vol_vs_avg', 'rsi14'} ...]
+    realtime: True = dipicu dari scan sesi (bar harian bisa masih berjalan; pola dapat berubah).
     """
     if not items:
         return ""
@@ -252,22 +198,38 @@ def format_chart_pattern_morning_message(items: List[Dict[str, Any]], test_mode:
             "🧪 <b>MODE UJI TELEGRAM</b> • tidak menyentuh dedup / kuota sekali-scan harian •"
         )
 
+    title = (
+        "📐 <b>CHART PATTERNS — ALERT REALTIME (TF-D)</b>"
+        if realtime
+        else "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>"
+    )
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>",
+        title,
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
     if badge:
         lines.extend([badge, ""])
-    lines.extend(
-        [
-            f"⏰ {get_current_time_wib()}",
-            "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
-            "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
-            "<i>Heuristik otomatis (bukan realtime). Candle harian yang sudah close (setelah bell = hari tersebut).</i>",
-            "",
-        ]
-    )
+    if realtime:
+        lines.extend(
+            [
+                f"⏰ {get_current_time_wib()}",
+                "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
+                "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
+                "<i>Scan sesi: candle harian IDX belum tentu final; pola yang sama tidak diulang hari ini setelah terkirim.</i>",
+                "",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                f"⏰ {get_current_time_wib()}",
+                "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
+                "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
+                "<i>Heuristik otomatis. Mode terjadwal: candle harian yang sudah close (setelah bell = hari tersebut).</i>",
+                "",
+            ]
+        )
 
     for pkey in sorted(grouped.keys()):
         rows = grouped[pkey]
@@ -292,8 +254,12 @@ def format_chart_pattern_morning_message(items: List[Dict[str, Any]], test_mode:
     return "\n".join(lines)
 
 
-def send_chart_pattern_morning_digest(items: List[Dict[str, Any]], test_mode: bool = False) -> bool:
-    msg = format_chart_pattern_morning_message(items, test_mode=test_mode)
+def send_chart_pattern_morning_digest(
+    items: List[Dict[str, Any]],
+    test_mode: bool = False,
+    realtime: bool = False,
+) -> bool:
+    msg = format_chart_pattern_morning_message(items, test_mode=test_mode, realtime=realtime)
     if not msg:
         if test_mode:
             nm = (
@@ -311,7 +277,7 @@ def send_chart_pattern_morning_digest(items: List[Dict[str, Any]], test_mode: bo
 def send_all_alerts(signals: dict) -> int:
     """
     Send all alert messages (v5)
-    Signal types: strong_buy, accumulation, early_entry, bull_div
+    Signal types: strong_buy, accumulation, early_entry
     """
     messages_sent = 0
     
@@ -324,12 +290,6 @@ def send_all_alerts(signals: dict) -> int:
     # Accumulation
     if signals.get('accumulation'):
         msg = format_accumulation_message(signals['accumulation'])
-        if send_telegram_message(msg):
-            messages_sent += 1
-    
-    # Bullish Divergence (NEW)
-    if signals.get('bull_div'):
-        msg = format_bull_div_message(signals['bull_div'])
         if send_telegram_message(msg):
             messages_sent += 1
     
@@ -358,7 +318,6 @@ Trading hours: 08:45 - 16:00 WIB
 • 📐 Chart Patterns — reviu harian (~20:00 WIB setelah pasar tutup, terpisah dari sinyal utama)
 • 🚀 Strong Buy (confirmed breakout)
 • 🔵 Accumulation
-• 🔀 Bullish Divergence
 • 🎯 Early Entry (Serok Bawah)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 """
@@ -405,15 +364,6 @@ def send_daily_recap_message(daily_summary: dict):
         lines.append(f"   {', '.join(tickers)}")
         lines.append("")
         total_signals += len(acc)
-    
-    # Bullish Divergence
-    div = daily_summary.get('bull_div', [])
-    if div:
-        lines.append(f"🔀 <b>BULL DIVERGENCE</b> ({len(div)} saham)")
-        tickers = [t.replace('.JK', '') for t in div]
-        lines.append(f"   {', '.join(tickers)}")
-        lines.append("")
-        total_signals += len(div)
     
     # Early Entry
     early = daily_summary.get('early_entry', [])
@@ -509,7 +459,10 @@ def send_evaluation_message(outcome: dict):
 
 def send_morning_recap_message(signals: dict):
     """
-    Send evening recap message at 18:00 with ALL stocks matching screener criteria (v5).
+    Digest radar saham (format lama "EVENING SCAN - 18:00").
+
+    Tidak dipanggil scheduler — sebelumnya salah terkirim saat opening recap 08:45.
+    Pertahankan untuk uji manual; untuk broadcast terjadwal, wire ke slot WIB terpisah.
     Splits into multiple messages if content exceeds Telegram limit.
     """
     
@@ -577,20 +530,6 @@ def send_morning_recap_message(signals: dict):
         section_lines.append("")
         sections.append("\n".join(section_lines))
         total_signals += len(early)
-    
-    # Bullish Divergence
-    div = signals.get('bull_div', [])
-    if div:
-        section_lines = [f"🔀 <b>BULL DIVERGENCE</b> ({len(div)} saham)"]
-        for r in div:
-            ticker_clean = r.ticker.replace('.JK', '')
-            section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.tp1 and r.tp1 > 0:
-                sl_price = r.price * 0.95
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
-        section_lines.append("")
-        sections.append("\n".join(section_lines))
-        total_signals += len(div)
     
     # Footer
     footer = [

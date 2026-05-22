@@ -15,10 +15,10 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import *
 from config.stocks_list import get_all_stocks, get_stock_count
-from core.data_fetcher import fetch_multiple_stocks
+from core.data_fetcher import fetch_multiple_stocks, compute_session_change_percent
 from core.scanner import scan_all_stocks, filter_signals, filter_all_current_signals, has_any_signal
 from database.state_manager import StateManager
-from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_morning_recap_message, send_chart_pattern_morning_digest
+from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_chart_pattern_morning_digest
 
 # ── Learning system (graceful degradation jika DB tidak ada) ───────────
 try:
@@ -32,7 +32,7 @@ except ImportError as e:
     def get_market_regime(**kw): return {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
     def track_all_signals(*a, **kw): return 0
     def get_active_signal_tickers_by_type(*a, **kw):
-        return {'strong_buy': set(), 'accumulation': set(), 'early_entry': set(), 'bull_div': set()}
+        return {'strong_buy': set(), 'accumulation': set(), 'early_entry': set()}
     def init_db(): return False
 
 # Setup logging
@@ -86,6 +86,77 @@ def is_market_close_time() -> bool:
     return now.hour == TRADING_END_HOUR and now.minute >= TRADING_END_MINUTE and now.minute <= TRADING_END_MINUTE + 5
 
 
+def collect_new_chart_pattern_alerts(
+    stock_data: dict,
+    state_manager: StateManager,
+    *,
+    telegram_test_mode: bool = False,
+) -> list:
+    """
+    Kumpulkan baris pola chart TF-D yang lolos filter dan belum pernah di-alert hari ini.
+    Tidak menulis dedup ke disk — caller memanggil persist setelah Telegram sukses.
+    """
+    from core.chart_patterns import (
+        detect_bullish_chart_patterns,
+        PATTERN_LABELS,
+        CHART_MIN_BARS,
+        passes_chart_alert_quality_filters,
+    )
+
+    alerts: list = []
+    for ticker, df in stock_data.items():
+        if df is None or len(df) < CHART_MIN_BARS:
+            continue
+        try:
+            dx = df.copy()
+            dx["turnover"] = dx["close"] * dx["volume"]
+            avg_to = dx["turnover"].rolling(window=5).mean().iloc[-1]
+            if avg_to < MIN_DAILY_TURNOVER:
+                continue
+
+            flags = detect_bullish_chart_patterns(dx)
+            if not any(flags.values()):
+                continue
+            if not passes_chart_alert_quality_filters(dx):
+                continue
+
+            _rsi_raw = dx["rsi"].iloc[-1]
+            try:
+                rsi14 = float(_rsi_raw)
+                if rsi14 != rsi14:  # NaN
+                    rsi14 = None
+            except (TypeError, ValueError):
+                rsi14 = None
+
+            price = float(dx["close"].iloc[-1])
+            chg = compute_session_change_percent(dx, ticker)
+            avg_vol = float(dx["volume"].rolling(window=VOLUME_PERIOD).mean().iloc[-1])
+            vm = float(dx["volume"].iloc[-1] / avg_vol) if avg_vol > 0 else 1.0
+
+            for pk, fired in flags.items():
+                if not fired:
+                    continue
+                if (not telegram_test_mode) and state_manager.is_chart_combo_alerted(ticker, pk):
+                    continue
+                alerts.append({
+                    "ticker": ticker,
+                    "pattern_key": pk,
+                    "label": PATTERN_LABELS.get(pk, pk),
+                    "price": price,
+                    "change_pct": chg,
+                    "vol_vs_avg": vm,
+                    "rsi14": rsi14,
+                })
+        except Exception as e:
+            logger.warning(f"Chart pattern skip {ticker}: {e}")
+    return alerts
+
+
+def persist_chart_pattern_alert_rows(state_manager: StateManager, alerts: list) -> None:
+    for row in alerts:
+        state_manager.add_chart_pattern_alert(row["ticker"], row["pattern_key"])
+
+
 def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     """
     Run a single scan cycle.
@@ -129,10 +200,8 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # Scan all stocks
     logger.info("Analyzing stocks...")
     results = scan_all_stocks(stock_data, previous_states)
-    
-    # ✅ FREE MEMORY: release large DataFrames immediately after scan
-    del stock_data
-    gc.collect()
+
+    chart_pattern_new_rows = 0
 
     # ── Ambil kondisi pasar IHSG (untuk learning tracking) ───────────
     regime_info = {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
@@ -177,7 +246,32 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
                 logger.warning(f"[Learning] Tracking error (bot tetap jalan): {e}")
     else:
         logger.info("No NEW signals detected this scan")
-    
+
+    if CHART_PATTERN_REALTIME:
+        try:
+            cp_alerts = collect_new_chart_pattern_alerts(
+                stock_data, state_manager, telegram_test_mode=False
+            )
+            if cp_alerts:
+                ok_cp = send_chart_pattern_morning_digest(
+                    cp_alerts, test_mode=False, realtime=True
+                )
+                if ok_cp:
+                    persist_chart_pattern_alert_rows(state_manager, cp_alerts)
+                    chart_pattern_new_rows = len(cp_alerts)
+                    logger.info(
+                        f"Chart patterns (realtime): {chart_pattern_new_rows} new row(s) sent"
+                    )
+                else:
+                    logger.warning(
+                        "Chart patterns (realtime): Telegram send failed; dedup not updated"
+                    )
+        except Exception as e:
+            logger.warning(f"Chart patterns (realtime): {e}")
+
+    del stock_data
+    gc.collect()
+
     # Update states
     logger.info("Updating stock states...")
     for ticker, result in results.items():
@@ -191,7 +285,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         'strong_buys': len(new_signals['strong_buy']),
         'accumulations': len(new_signals['accumulation']),
         'early_entries': len(new_signals['early_entry']),
-        'bull_divs': len(new_signals['bull_div']),
+        'chart_pattern_new_rows': chart_pattern_new_rows,
         'timestamp': datetime.now(WIB).isoformat()
     }
     
@@ -213,12 +307,6 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
                          (uji manual: ``python main.py morning-patterns --telegram-test``).
     """
     from core.data_fetcher import fetch_multiple_stocks
-    from core.chart_patterns import (
-        detect_bullish_chart_patterns,
-        PATTERN_LABELS,
-        CHART_MIN_BARS,
-        passes_chart_alert_quality_filters,
-    )
 
     state_manager.reset_daily_if_new_day()
 
@@ -250,56 +338,9 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
             state_manager.mark_morning_chart_patterns_scan_complete()
         return
 
-    alerts: list = []
-
-    for ticker, df in stock_data.items():
-        if df is None or len(df) < CHART_MIN_BARS:
-            continue
-        try:
-            dx = df.copy()
-            dx["turnover"] = dx["close"] * dx["volume"]
-            avg_to = dx["turnover"].rolling(window=5).mean().iloc[-1]
-            if avg_to < MIN_DAILY_TURNOVER:
-                continue
-
-            flags = detect_bullish_chart_patterns(dx)
-            if not any(flags.values()):
-                continue
-            if not passes_chart_alert_quality_filters(dx):
-                continue
-
-            _rsi_raw = dx["rsi"].iloc[-1]
-            try:
-                rsi14 = float(_rsi_raw)
-                if rsi14 != rsi14:  # NaN
-                    rsi14 = None
-            except (TypeError, ValueError):
-                rsi14 = None
-
-            price = float(dx["close"].iloc[-1])
-            prev_close = float(dx["close"].iloc[-2]) if len(dx) >= 2 else price
-            chg = ((price - prev_close) / prev_close * 100.0) if prev_close > 0 else 0.0
-            avg_vol = float(dx["volume"].rolling(window=VOLUME_PERIOD).mean().iloc[-1])
-            vm = float(dx["volume"].iloc[-1] / avg_vol) if avg_vol > 0 else 1.0
-
-            for pk, fired in flags.items():
-                if not fired:
-                    continue
-                if (not telegram_test_mode) and state_manager.is_chart_combo_alerted(ticker, pk):
-                    continue
-                alerts.append({
-                    "ticker": ticker,
-                    "pattern_key": pk,
-                    "label": PATTERN_LABELS.get(pk, pk),
-                    "price": price,
-                    "change_pct": chg,
-                    "vol_vs_avg": vm,
-                    "rsi14": rsi14,
-                })
-                if not telegram_test_mode:
-                    state_manager.add_chart_pattern_alert(ticker, pk)
-        except Exception as e:
-            logger.warning(f"Chart pattern skip {ticker}: {e}")
+    alerts = collect_new_chart_pattern_alerts(
+        stock_data, state_manager, telegram_test_mode=telegram_test_mode
+    )
 
     if own_fetch:
         del stock_data
@@ -310,11 +351,15 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
             "Morning chart patterns: %s%s alert row(s)"
             % (len(alerts), " (telegram test)" if telegram_test_mode else " new")
         )
-        send_chart_pattern_morning_digest(alerts, test_mode=telegram_test_mode)
+        ok = send_chart_pattern_morning_digest(
+            alerts, test_mode=telegram_test_mode, realtime=False
+        )
+        if ok and not telegram_test_mode:
+            persist_chart_pattern_alert_rows(state_manager, alerts)
     else:
         logger.info("Morning chart patterns: no new setups")
         if telegram_test_mode:
-            send_chart_pattern_morning_digest([], test_mode=True)
+            send_chart_pattern_morning_digest([], test_mode=True, realtime=False)
 
     if not telegram_test_mode:
         state_manager.mark_morning_chart_patterns_scan_complete()
@@ -370,10 +415,9 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
             f"SB={len(active_map['strong_buy'])}, "
             f"ACC={len(active_map['accumulation'])}, "
             f"EE={len(active_map['early_entry'])}, "
-            f"DIV={len(active_map['bull_div'])}"
         )
 
-        for signal_type in ('strong_buy', 'accumulation', 'early_entry', 'bull_div'):
+        for signal_type in ('strong_buy', 'accumulation', 'early_entry'):
             allowed_tickers = active_map.get(signal_type, set())
             all_current_signals[signal_type] = [
                 r for r in all_current_signals[signal_type] if r.ticker in allowed_tickers
@@ -385,7 +429,6 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
             active_map.get('strong_buy', set())
             | active_map.get('accumulation', set())
             | active_map.get('early_entry', set())
-            | active_map.get('bull_div', set())
         )
         all_current_signals['bullish'] = [
             r for r in all_current_signals['bullish'] if r.ticker in actionable
@@ -399,13 +442,13 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     if total_signals == 0:
         logger.info("No matching signals found in recap scan.")
         return
-    
+
     if recap_type == "OPENING":
-        logger.info(f"Sending {recap_type} recap with {total_signals} total signals...")
-        send_morning_recap_message(all_current_signals)
-    
-    # If it's market close, also send daily summary
-    if recap_type == "CLOSING":
+        # Opening recap: scan + update state saja — tidak kirim "EVENING SCAN" ke Telegram
+        logger.info(
+            f"Opening recap: {total_signals} saham match (state diperbarui, tanpa broadcast Telegram)."
+        )
+    elif recap_type == "CLOSING":
         daily_summary = state_manager.get_daily_summary()
         total_daily = sum(len(v) for k, v in daily_summary.items() if k != 'date')
         if total_daily > 0:

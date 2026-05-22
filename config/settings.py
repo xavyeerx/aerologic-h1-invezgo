@@ -28,8 +28,8 @@ EMA_SLOW = 200
 
 # === VOLUME SETTINGS ===
 VOLUME_PERIOD = 20
-VOLUME_SPIKE_THRESHOLD = 1.5
-UNUSUAL_VOLUME_THRESHOLD = 2.5
+VOLUME_SPIKE_THRESHOLD = 1.0   # >= 1× MA20
+UNUSUAL_VOLUME_THRESHOLD = 1.5  # >= 1.5× MA20
 MIN_VOLUME = 100000
 
 # === STOCHASTIC RSI SETTINGS ===
@@ -38,7 +38,10 @@ STOCH_PERIOD = 14
 SMOOTH_K = 3
 SMOOTH_D = 3
 STOCH_OVERBOUGHT = 80
-STOCH_OVERSOLD = 20
+STOCH_OVERSOLD = 20  # flag indikator (overbought/oversold ketat di chart logic)
+# Accumulation + skor: K di zona bawah ATAU golden cross (cross diabaikan jika K >= overbought cross)
+ACCUM_STOCH_K_MAX = 35
+ACCUM_STOCH_CROSS_K_MAX = 70  # golden cross valid selama K belum zona jual ekstrem (>= 70)
 
 # === ATR & ADX SETTINGS ===
 ATR_PERIOD = 14
@@ -77,8 +80,8 @@ DCA_LOOKBACK = 20
 DCA_VOLUME_THRESHOLD = 0.7  # Healthy correction = vol < 70% avg
 
 # === SCORING THRESHOLDS (v5) ===
-BUY_THRESHOLD = 70
-ACCUMULATE_THRESHOLD = 55
+BUY_THRESHOLD = 60
+ACCUMULATE_THRESHOLD = 45
 HOLD_THRESHOLD = 40
 
 # === SCANNER SETTINGS ===
@@ -139,6 +142,18 @@ CHART_PATTERN_ALERT_HOUR = 20
 CHART_PATTERN_ALERT_MINUTE = 0
 # Hanya dalam menit pertama setelah CHART_PATTERN_ALERT_* job diizinkan jalan; lewat itu skip sampai besok
 CHART_PATTERN_EXECUTION_WINDOW_MINUTES = 2
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    v = os.getenv(name)
+    if v is None or v.strip() == "":
+        return default
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# True: deteksi pola chart tiap siklus scan (08:46–15:59), alert baru segera (dedup per ticker|pola per hari).
+# False: hanya digest terjadwal lewat CHART_PATTERN_ALERT_* (setelah tutup).
+CHART_PATTERN_REALTIME = _env_bool("CHART_PATTERN_REALTIME", True)
 
 # Filter kualitas alert pola (TF-D): volume vs MA20, OBV accumulation (RSI hanya ditampilkan di pesan Telegram)
 

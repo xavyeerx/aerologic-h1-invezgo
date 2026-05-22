@@ -11,6 +11,7 @@ from config.settings import *
 from .supertrend import calculate_supertrend, is_bullish, just_turned_bullish, just_turned_bearish
 from .indicators import calculate_all_indicators
 from .scoring import calculate_total_score
+from .data_fetcher import compute_session_change_percent
 
 logger = logging.getLogger(__name__)
 
@@ -153,11 +154,8 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         else:
             result.divergence_status = ""
         
-        # Price change
-        if len(df) >= 2:
-            prev_close = df['close'].iloc[-2]
-            if prev_close > 0:
-                result.change_percent = ((result.price - prev_close) / prev_close) * 100
+        # Price change vs penutupan sesi sebelumnya (perbaikan glitch Yahoo intraday)
+        result.change_percent = compute_session_change_percent(df, ticker)
         
         # Score and status (v5)
         result.score, result.status, result.status_emoji = calculate_total_score(df)
@@ -166,76 +164,44 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         # SIGNAL DETECTION v5
         # ═══════════════════════════════════════════
         
-        # 1. STRONG BUY Signal (v5: confirmed breakout + score threshold)
-        # Uses False Breakout Filter: need CONFIRMATION_BARS above supertrend
+        # 1. STRONG BUY — deteksi dini: bullish + breakout baru / volume push + score
         is_bullish_trend = latest['direction'] == 1
         breakout_up = just_turned_bullish(df)
-        
-        # Count consecutive bars above supertrend after breakout
-        if is_bullish_trend:
-            bars_above = 0
-            for i in range(len(df) - 1, max(len(df) - CONFIRMATION_BARS - 5, 0), -1):
-                if df.iloc[i]['direction'] == 1 and df.iloc[i]['close'] > df.iloc[i]['supertrend']:
-                    bars_above += 1
-                else:
-                    break
-            breakout_confirmed = bars_above >= CONFIRMATION_BARS
-        else:
-            breakout_confirmed = False
-        
-        # Check if recent breakout occurred (within last CONFIRMATION_BARS+1 bars)
-        recent_breakout = False
-        for i in range(1, min(CONFIRMATION_BARS + 2, len(df))):
-            idx = len(df) - 1 - i
-            if idx >= 1:
-                prev_dir = df.iloc[idx - 1]['direction']
-                curr_dir = df.iloc[idx]['direction']
-                if prev_dir == -1 and curr_dir == 1:
+
+        recent_breakout = bool(breakout_up)
+        if not recent_breakout:
+            for i in range(1, min(6, len(df))):
+                idx = len(df) - 1 - i
+                if idx >= 1 and df.iloc[idx - 1]['direction'] == -1 and df.iloc[idx]['direction'] == 1:
                     recent_breakout = True
                     break
-        
-        # Also count current bar breakout
-        if breakout_up:
-            recent_breakout = True
-        
-        # Strong Buy = confirmed breakout + high score + trending
-        if is_bullish_trend and (breakout_confirmed or breakout_up) and recent_breakout and result.score >= BUY_THRESHOLD:
+
+        vol_push = latest.get('is_volume_spike', False) or latest.get('is_unusual_volume', False)
+
+        if (
+            is_bullish_trend
+            and result.score >= BUY_THRESHOLD
+            and (recent_breakout or vol_push)
+        ):
             result.is_strong_buy = True
-        
-        # 2. ACCUMULATION Signal (v5 logic)
-        # Smart Stochastic RSI: different logic for trending vs ranging
-        stoch_k = latest.get('stoch_k', 50.0)
-        stoch_d = latest.get('stoch_d', 50.0)
+
+        # 2. ACCUMULATION — Stoch: K < 35 ATAU golden cross valid (K < ACCUM_STOCH_CROSS_K_MAX, default 70)
+        stoch_k = float(latest.get('stoch_k', 50.0))
         stoch_k_cross_up = latest.get('stoch_k_cross_up', False)
-        is_stoch_oversold = latest.get('stoch_oversold', False)
-        is_trending = latest.get('is_trending', False)
-        
-        # Smart Stoch Buy (v5)
-        stoch_buy_trending = is_trending and stoch_k_cross_up and stoch_k > 20
-        stoch_buy_ranging = not is_trending and is_stoch_oversold and stoch_k_cross_up
-        smart_stoch_buy = stoch_buy_trending or stoch_buy_ranging
-        
-        # ACC = bullish + (oversold OR smartStochBuy) + (spike OR unusual) + score >= acc + not sideways
-        acc_has_momentum = is_stoch_oversold or smart_stoch_buy
+        acc_stoch_zone = stoch_k < ACCUM_STOCH_K_MAX
+        acc_cross_valid = stoch_k_cross_up and stoch_k < ACCUM_STOCH_CROSS_K_MAX
+        acc_has_momentum = acc_cross_valid or acc_stoch_zone
         acc_has_volume = latest.get('is_volume_spike', False) or latest.get('is_unusual_volume', False)
-        is_not_sideways = not latest.get('is_sideways', False)
-        
-        if is_bullish_trend and acc_has_momentum and acc_has_volume and result.score >= ACCUMULATE_THRESHOLD and is_not_sideways:
+
+        if (
+            is_bullish_trend
+            and acc_has_momentum
+            and acc_has_volume
+            and result.score >= ACCUMULATE_THRESHOLD
+        ):
             result.is_accumulation = True
         
-        # 3. BULLISH DIVERGENCE Signal (v5.1 Enhanced)
-        if latest.get('bullish_divergence', False) and not is_bullish_trend:
-            strength = int(latest.get('div_strength', 0))
-            result.div_strength = strength
-            if strength >= 3:
-                result.div_grade = "STRONG"
-            elif strength >= 1:
-                result.div_grade = "MODERATE"
-            else:
-                result.div_grade = "WEAK"
-            result.is_bull_div = True
-        
-        # 4. EARLY ENTRY (Serok Bawah)
+        # 3. EARLY ENTRY (Serok Bawah)
         if len(df) >= 2:
             prev_close = df['close'].iloc[-2]
             current_close = latest.get('close', 0)
@@ -317,13 +283,11 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
     Filter and categorize signals (v5)
     Removed: stoch_crossover, bearish_break
     Renamed: bullish_break → strong_buy
-    Added: bull_div
     """
     signals = {
         'strong_buy': [],       # Was bullish_break
         'accumulation': [],
         'early_entry': [],
-        'bull_div': []          # NEW
     }
     
     for ticker, result in results.items():
@@ -337,8 +301,6 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
             signals['accumulation'].append(result)
         if result.is_early_entry:
             signals['early_entry'].append(result)
-        if result.is_bull_div:
-            signals['bull_div'].append(result)
     
     return signals
 
@@ -353,7 +315,6 @@ def filter_all_current_signals(results: Dict[str, ScanResult], state_manager=Non
         'accumulation': [],
         'bullish': [],
         'early_entry': [],
-        'bull_div': []
     }
 
     def _is_done(ticker, signal_type):
@@ -377,9 +338,6 @@ def filter_all_current_signals(results: Dict[str, ScanResult], state_manager=Non
 
         if result.is_early_entry and not _is_done(ticker, 'early_entry'):
             categories['early_entry'].append(result)
-
-        if result.is_bull_div and not _is_done(ticker, 'bull_div'):
-            categories['bull_div'].append(result)
 
     for key in categories:
         categories[key] = sorted(categories[key], key=lambda x: x.score, reverse=True)

@@ -96,8 +96,12 @@ def calculate_momentum_score(df: pd.DataFrame) -> float:
     if row.get('is_strong_momentum', False) and row.get('is_positive_momentum', False):
         score += 4.0
     
-    # Stoch oversold + bullish: +8 (removed stoch_neutral from v3)
-    if row.get('stoch_oversold', False) and row.get('direction', -1) == 1:
+    # Stoch: K < zona ATAU golden cross dengan K < 70 (+ bullish, hindari cross overbought)
+    stoch_k = float(row.get('stoch_k', 50.0))
+    stoch_cross_up = row.get('stoch_k_cross_up', False)
+    stoch_cross_valid = stoch_cross_up and stoch_k < ACCUM_STOCH_CROSS_K_MAX
+    stoch_zone = stoch_k < ACCUM_STOCH_K_MAX
+    if row.get('direction', -1) == 1 and (stoch_cross_valid or stoch_zone):
         score += 8.0
     
     # MACD bullish: +5 (NEW v5, replaces stoch_neutral)
@@ -173,16 +177,8 @@ def calculate_total_score(df: pd.DataFrame) -> Tuple[int, str, str]:
     pattern = calculate_pattern_score(df)  # NEW v5
     
     total = trend + regime + volume + momentum + position + pattern
-    
-    # Apply sideways penalty (v5: score * 0.7)
+
     row = df.iloc[-1]
-    if row.get('is_sideways', True) and not row.get('is_unusual_volume', False):
-        total = total * 0.7
-    
-    # Bearish divergence penalty (NEW v5: score * 0.9)
-    if row.get('bearish_divergence', False) and row.get('direction', -1) == 1:
-        total = total * 0.9
-    
     final_score = int(round(total))
     is_trending = row.get('is_trending', False)
     

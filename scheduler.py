@@ -4,8 +4,8 @@
 # Strategi: tidur PANJANG di luar jam trading, bangun TEPAT saat dibutuhkan.
 #
 # Jadwal utama (hari kerja / Senin–Jumat):
-#   20:00 → alert pola chart TF-D (1×, jendela singkat; lewat = skip hari ini)
-#   08:40 → Pre-wake sebelum recap (Senin ±19:55 juga pre-wake jelang slot chart malam)
+#   Pola chart TF-D: default realtime tiap scan (08:46–15:59); atau terjadwal 20:00 jika CHART_PATTERN_REALTIME=0
+#   08:40 → Pre-wake sebelum recap
 #   08:45 → Opening recap (tidak lagi mengirit pola chart di sini)
 #   08:46 – 15:59 → Scan setiap 1 menit
 #   16:00 → Closing recap
@@ -13,7 +13,7 @@
 #   Selain itu → tidur hingga waktu event berikutnya
 #
 # Akhir pekan:
-#   → Tidur hingga Senin ±19:55 (pre-wake chart malam)
+#   → Tidur hingga hari kerja berikutnya pre-wake 08:40
 #
 # Di luar sesi rutin scanner:
 #   → Tidur hingga event berikutnya (20:00 pol chart / dll.)
@@ -35,6 +35,7 @@ from config.settings import (
     CHART_PATTERN_ALERT_HOUR,
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_EXECUTION_WINDOW_MINUTES,
+    CHART_PATTERN_REALTIME,
 )
 
 from main import (
@@ -153,7 +154,7 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
         next_pre_open = _next_weekday_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)
         return next_pre_open, "Pre-wake hari kerja (08:40)"
 
-    need_chart = not sm.morning_chart_patterns_already_scanned_today()
+    need_chart = (not CHART_PATTERN_REALTIME) and not sm.morning_chart_patterns_already_scanned_today()
 
     # ── Slot pagi (sebelum buka): pola chart punya prioritas pertama (jarang dipakai jika jam chart malam)
     if need_chart and not chart_evening:
@@ -214,13 +215,13 @@ def main():
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")
     logger.info("=" * 50)
     logger.info(
-        f"Chart patterns TF-D: {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB (terpisah)"
+        f"Pola chart TF-D: {'realtime (tiap scan sesi)' if CHART_PATTERN_REALTIME else f'terjadwal {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB'}"
     )
     logger.info("Opening recap        : 08:45 WIB")
     logger.info("Scan interval   : 1 menit (08:46–15:59)")
     logger.info("Closing recap   : 16:00 WIB")
     logger.info("Outcome check   : 16:30 WIB")
-    logger.info("Akhir pekan     : Server idle (tidur hingga Senin pre-wake chart)")
+    logger.info("Akhir pekan     : Server idle (tidur hingga hari kerja 08:40)")
     logger.info("Luar jam trading: Tidur panjang (tidak polling)")
     logger.info(f"Learning system : {'Aktif' if _LEARNING_OK else 'Tidak aktif (no DB)'}")
     logger.info("=" * 50)
@@ -293,8 +294,12 @@ def main():
             chart_at = _today_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE)
             chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
 
-            # Pola chart: jendela singkat di CHART_PATTERN_*; lewat = tidak catch-up
-            if weekday < 5 and not state_manager.morning_chart_patterns_already_scanned_today():
+            # Pola chart terjadwal (mati jika CHART_PATTERN_REALTIME — pola jalan di run_scan)
+            if (
+                not CHART_PATTERN_REALTIME
+                and weekday < 5
+                and not state_manager.morning_chart_patterns_already_scanned_today()
+            ):
                 if chart_at <= now < chart_end:
                     logger.info(
                         f"📐 Alert pola chart TF-D (slot "
