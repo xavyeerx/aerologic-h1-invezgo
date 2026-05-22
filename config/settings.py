@@ -141,8 +141,8 @@ CHART_MIN_BARS = max(
 )
 
 # Alert pola chart TF-D (terpisah dari Strong Buy / Acc / dll) — reviu terjadwal 1× per hari
-CHART_PATTERN_ALERT_HOUR = 15
-CHART_PATTERN_ALERT_MINUTE = 30
+CHART_PATTERN_ALERT_HOUR = 16
+CHART_PATTERN_ALERT_MINUTE = 45
 # Hanya dalam menit pertama setelah CHART_PATTERN_ALERT_* job diizinkan jalan; lewat itu skip sampai besok
 CHART_PATTERN_EXECUTION_WINDOW_MINUTES = 2
 

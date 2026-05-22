@@ -245,7 +245,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     else:
         logger.info("No NEW signals detected this scan")
 
-    # Pola chart TF-D hanya lewat run_morning_chart_pattern_scan() / scheduler (15:30), bukan run_scan.
+    # Pola chart TF-D hanya lewat run_morning_chart_pattern_scan() / scheduler (CHART_PATTERN_ALERT_*), bukan run_scan.
 
     del stock_data
     gc.collect()
@@ -278,7 +278,7 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
     """
     Deteksi pola chart bullish TF daily pada **bar terakhir seri** (= sesi H setelah pasar tutup;
     tidak memaksa H-1 seperti skenario digest pagi). Dipanggil maksimal sekali per hari —
-    scheduler slot terjadwal CHART_PATTERN_ALERT_* (default 15:30 WIB). Fetch memakai DATA_PERIOD (mis. 90d).
+    scheduler slot terjadwal CHART_PATTERN_ALERT_* (default 16:45 WIB). Fetch memakai DATA_PERIOD (mis. 90d).
     Jika stock_data hasil fetch sudah ada (mis. dari run_scan), dipakai lagi agar tidak fetch ganda.
 
     telegram_test_mode: jalankan lagi + kirim Telegram tanpa blokir "sudah scan hari ini" dan tanpa tulis dedup pola

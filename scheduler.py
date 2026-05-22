@@ -4,7 +4,7 @@
 # Strategi: tidur PANJANG di luar jam trading, bangun TEPAT saat dibutuhkan.
 #
 # Jadwal utama (hari kerja / Senin–Jumat):
-#   Pola chart TF-D: terjadwal CHART_PATTERN_ALERT_* (default 15:30); realtime hanya jika CHART_PATTERN_REALTIME=1
+#   Pola chart TF-D: terjadwal CHART_PATTERN_ALERT_* (default 16:45); realtime hanya jika CHART_PATTERN_REALTIME=1
 #   08:40 → Pre-wake sebelum recap
 #   08:45 → Opening recap (tidak lagi mengirit pola chart di sini)
 #   08:46 – 15:59 → Scan setiap 1 menit
@@ -159,7 +159,7 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
 
     need_chart = (not CHART_PATTERN_REALTIME) and not sm.morning_chart_patterns_already_scanned_today()
 
-    # ── Slot pola chart sebelum buka (bukan jam 15:30 intraday) ──
+    # ── Slot pola chart sebelum buka (bukan slot intraday/sore) ──
     if need_chart and chart_pre_market:
         if now < chart_at:
             return chart_at, "Chart patterns TF-D (pre-open)"
@@ -177,7 +177,7 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
     if now < market_open and not state['recap_open_done']:
         return market_open, "Opening Recap (08:45)"
 
-    # ── Sesi trading 08:46 – 15:59 (pola chart intraday hanya di jendela 15:30) ──
+    # ── Sesi trading 08:46 – 15:59 (pola chart sore hanya jika slot < tutup; default 16:45 = malam) ──
     if market_open <= now < market_close:
         if need_chart and is_chart_pattern_alert_window(now):
             urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
