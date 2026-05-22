@@ -121,7 +121,8 @@ CHART_PENNANT_IMPULSE_MIN_PCT = 5.5
 CHART_PENNANT_MAX_RANGE_PCT = 4.25  # konsolidasi pennant ± sempit (% dari close)
 
 CHART_TOUCH_ATR_MULT = 0.35
-CHART_HARM_FIB_RATIO = 0.618
+# Zona fib kasar untuk reject harmonic (retrace + extension)
+CHART_HARM_FIB_RATIOS = (0.618, 0.886, 1.13)
 CHART_HARM_ZONE_ATR_MULT = 0.5
 CHART_FALSE_BREAK_LOOKBACK = 16
 

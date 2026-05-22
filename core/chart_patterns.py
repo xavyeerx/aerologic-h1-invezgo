@@ -25,12 +25,13 @@ from config.settings import (
     CHART_PENNANT_IMPULSE_MIN_PCT,
     CHART_PENNANT_MAX_RANGE_PCT,
     CHART_TOUCH_ATR_MULT,
-    CHART_HARM_FIB_RATIO,
+    CHART_HARM_FIB_RATIOS,
     CHART_HARM_ZONE_ATR_MULT,
     CHART_FALSE_BREAK_LOOKBACK,
     CHART_MIN_BARS,
     EMA_FAST,
     EMA_MEDIUM,
+    EMA_SLOW,
     VOLUME_PERIOD,
     ATR_PERIOD,
 )
@@ -173,18 +174,24 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
                 ):
                     out["bullish_pennant"] = vol_mult >= 0.9
 
-    # --- Reject dynamic support (SMA20 / SMA50): sentuh salah satu, close di atas keduanya ---
+    # --- Reject dynamic support (SMA20/50/100/200): sentuh salah satu, close di atas semua ---
     low = float(last["low"])
     open_ = float(last.get("open", close))
-    ma20 = float(calculate_sma(df["close"], EMA_FAST).iloc[-1])
-    ma50 = float(calculate_sma(df["close"], EMA_MEDIUM).iloc[-1])
-    if atr > 0 and np.isfinite(ma20) and np.isfinite(ma50) and ma20 > 0 and ma50 > 0:
-        tb20 = (CHART_TOUCH_ATR_MULT * atr) / ma20
-        tb50 = (CHART_TOUCH_ATR_MULT * atr) / ma50
-        touch20 = low <= ma20 * (1.0 + tb20) and low >= ma20 * (1.0 - tb20 * 1.5)
-        touch50 = low <= ma50 * (1.0 + tb50) and low >= ma50 * (1.0 - tb50 * 1.5)
-        touched = touch20 or touch50
-        reclaimed = close > ma20 and close > ma50 and close >= open_
+    ma_periods = (EMA_FAST, EMA_MEDIUM, 100, EMA_SLOW)
+    mas = {
+        p: float(calculate_sma(df["close"], p).iloc[-1])
+        for p in ma_periods
+    }
+    valid = [p for p in ma_periods if np.isfinite(mas[p]) and mas[p] > 0]
+    if atr > 0 and EMA_FAST in valid and EMA_MEDIUM in valid:
+        touched = False
+        for p in valid:
+            ma = mas[p]
+            tb = (CHART_TOUCH_ATR_MULT * atr) / ma
+            if low <= ma * (1.0 + tb) and low >= ma * (1.0 - tb * 1.5):
+                touched = True
+                break
+        reclaimed = all(close > mas[p] for p in valid) and close >= open_
         if touched and reclaimed:
             out["reject_dynamic_support"] = True
 
@@ -195,11 +202,13 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
             hi = float(win["high"].max())
             lo = float(win["low"].min())
             if hi > lo:
-                lvl = lo + CHART_HARM_FIB_RATIO * (hi - lo)
                 band = CHART_HARM_ZONE_ATR_MULT * atr
                 low = float(last["low"])
-                if low <= lvl + band and low >= lvl - band * 2 and close > lvl:
-                    out["reject_harmonic_support"] = True
+                for ratio in CHART_HARM_FIB_RATIOS:
+                    lvl = lo + ratio * (hi - lo)
+                    if low <= lvl + band and low >= lvl - band * 2 and close > lvl:
+                        out["reject_harmonic_support"] = True
+                        break
 
     # --- False break support (bear trap ringan) ---
     lb = CHART_FALSE_BREAK_LOOKBACK
