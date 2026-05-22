@@ -102,7 +102,7 @@ def format_strong_buy_message(results: List) -> str:
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"💡 <i>Bullish + breakout/volume push + score ≥ {BUY_THRESHOLD}</i>")
+    lines.append(f"💡 <i>Breakout terkonfirmasi + score ≥ {BUY_THRESHOLD}</i>")
     lines.append(f"Total: {len(results)} saham strong buy")
     
     return "\n".join(lines)

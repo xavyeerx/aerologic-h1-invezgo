@@ -164,24 +164,39 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         # SIGNAL DETECTION v5
         # ═══════════════════════════════════════════
         
-        # 1. STRONG BUY — deteksi dini: bullish + breakout baru / volume push + score
+        # 1. STRONG BUY (logika v5 asli: konfirmasi bar + breakout/flip + skor)
         is_bullish_trend = latest['direction'] == 1
         breakout_up = just_turned_bullish(df)
 
-        recent_breakout = bool(breakout_up)
-        if not recent_breakout:
-            for i in range(1, min(6, len(df))):
-                idx = len(df) - 1 - i
-                if idx >= 1 and df.iloc[idx - 1]['direction'] == -1 and df.iloc[idx]['direction'] == 1:
+        if is_bullish_trend:
+            bars_above = 0
+            for i in range(len(df) - 1, max(len(df) - CONFIRMATION_BARS - 5, 0), -1):
+                if df.iloc[i]['direction'] == 1 and df.iloc[i]['close'] > df.iloc[i]['supertrend']:
+                    bars_above += 1
+                else:
+                    break
+            breakout_confirmed = bars_above >= CONFIRMATION_BARS
+        else:
+            breakout_confirmed = False
+
+        recent_breakout = False
+        for i in range(1, min(CONFIRMATION_BARS + 2, len(df))):
+            idx = len(df) - 1 - i
+            if idx >= 1:
+                prev_dir = df.iloc[idx - 1]['direction']
+                curr_dir = df.iloc[idx]['direction']
+                if prev_dir == -1 and curr_dir == 1:
                     recent_breakout = True
                     break
 
-        vol_push = latest.get('is_volume_spike', False) or latest.get('is_unusual_volume', False)
+        if breakout_up:
+            recent_breakout = True
 
         if (
             is_bullish_trend
+            and (breakout_confirmed or breakout_up)
+            and recent_breakout
             and result.score >= BUY_THRESHOLD
-            and (recent_breakout or vol_push)
         ):
             result.is_strong_buy = True
 
