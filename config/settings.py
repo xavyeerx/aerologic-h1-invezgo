@@ -3,8 +3,10 @@
 # ============================================
 
 import os
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytz
 from dotenv import load_dotenv
 
 # Load repo-root .env for local dev (does not override existing env vars)
@@ -153,7 +155,36 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 # True: deteksi pola chart tiap siklus scan (08:46–15:59). False: hanya slot terjadwal CHART_PATTERN_ALERT_*.
-CHART_PATTERN_REALTIME = _env_bool("CHART_PATTERN_REALTIME", False)
+# CHART_PATTERN_FORCE_SCHEDULED_ONLY (default True) mengabaikan env realtime — pola chart 1×/hari saja.
+CHART_PATTERN_FORCE_SCHEDULED_ONLY = _env_bool("CHART_PATTERN_FORCE_SCHEDULED_ONLY", True)
+CHART_PATTERN_REALTIME = (
+    _env_bool("CHART_PATTERN_REALTIME", False)
+    and not CHART_PATTERN_FORCE_SCHEDULED_ONLY
+)
+
+_WIB = pytz.timezone("Asia/Jakarta")
+
+
+def chart_pattern_slot_bounds(now: datetime | None = None, tz=_WIB) -> tuple[datetime, datetime]:
+    """Awal dan akhir jendela eksekusi pola chart hari ini (WIB)."""
+    now = now or datetime.now(tz)
+    chart_at = now.replace(
+        hour=CHART_PATTERN_ALERT_HOUR,
+        minute=CHART_PATTERN_ALERT_MINUTE,
+        second=0,
+        microsecond=0,
+    )
+    chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
+    return chart_at, chart_end
+
+
+def is_chart_pattern_alert_window(now: datetime | None = None, tz=_WIB) -> bool:
+    """True hanya di dalam jendela terjadwal (Senin–Jumat)."""
+    now = now or datetime.now(tz)
+    if now.weekday() >= 5:
+        return False
+    chart_at, chart_end = chart_pattern_slot_bounds(now, tz)
+    return chart_at <= now < chart_end
 
 # Filter kualitas alert pola (TF-D): volume vs MA20, OBV accumulation (RSI hanya ditampilkan di pesan Telegram)
 

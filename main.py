@@ -247,6 +247,8 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     else:
         logger.info("No NEW signals detected this scan")
 
+    # Pola chart hanya lewat scheduler (15:30) kecuali CHART_PATTERN_REALTIME=true
+    # dan CHART_PATTERN_FORCE_SCHEDULED_ONLY=false di settings/.env
     if CHART_PATTERN_REALTIME:
         try:
             cp_alerts = collect_new_chart_pattern_alerts(

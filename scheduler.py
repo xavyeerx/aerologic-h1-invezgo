@@ -35,7 +35,10 @@ from config.settings import (
     CHART_PATTERN_ALERT_HOUR,
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_EXECUTION_WINDOW_MINUTES,
+    CHART_PATTERN_FORCE_SCHEDULED_ONLY,
     CHART_PATTERN_REALTIME,
+    chart_pattern_slot_bounds,
+    is_chart_pattern_alert_window,
 )
 
 from main import (
@@ -141,13 +144,13 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
     """
     weekday = now.weekday()  # 0=Senin … 4=Jumat, 5=Sabtu, 6=Minggu
 
-    chart_at = _today_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE, tz=WIB)
-    chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
+    chart_at, chart_end = chart_pattern_slot_bounds(now, tz=WIB)
     pre_open = _today_at(OPEN_HOUR, OPEN_MIN - PRE_WAKE_MIN, tz=WIB)  # 08:40
     market_open = _today_at(OPEN_HOUR, OPEN_MIN, tz=WIB)
     market_close = _today_at(CLOSE_HOUR, CLOSE_MIN, tz=WIB)
     eval_time = _today_at(EVAL_HOUR, EVAL_MIN, tz=WIB)
     chart_evening = chart_at >= market_close
+    chart_pre_market = chart_at < market_open
 
     # ── Akhir pekan → tidur hingga hari kerja berikutnya (pre-open) ─
     if weekday >= 5:
@@ -156,13 +159,13 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
 
     need_chart = (not CHART_PATTERN_REALTIME) and not sm.morning_chart_patterns_already_scanned_today()
 
-    # ── Slot pagi (sebelum buka): pola chart punya prioritas pertama (jarang dipakai jika jam chart malam)
-    if need_chart and not chart_evening:
+    # ── Slot pola chart sebelum buka (bukan jam 15:30 intraday) ──
+    if need_chart and chart_pre_market:
         if now < chart_at:
-            return chart_at, "Chart patterns TF-D"
+            return chart_at, "Chart patterns TF-D (pre-open)"
         if now < chart_end:
             urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
-            return urgent, "Chart patterns (jendela eksekusi)"
+            return urgent, "Chart patterns (jendela pre-open)"
         urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
         return urgent, "Chart patterns (lewat jendela — tandai selesai)"
 
@@ -174,8 +177,17 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
     if now < market_open and not state['recap_open_done']:
         return market_open, "Opening Recap (08:45)"
 
-    # ── Sesi trading 08:46 – 15:59 ────────────────────────────────────
+    # ── Sesi trading 08:46 – 15:59 (pola chart intraday hanya di jendela 15:30) ──
     if market_open <= now < market_close:
+        if need_chart and is_chart_pattern_alert_window(now):
+            urgent = now.replace(second=0, microsecond=0) + timedelta(seconds=3)
+            return urgent, (
+                f"Chart patterns TF-D ({CHART_PATTERN_ALERT_HOUR:02d}:"
+                f"{CHART_PATTERN_ALERT_MINUTE:02d})"
+            )
+        if need_chart and now < chart_at:
+            next_scan = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
+            return min(next_scan, chart_at), "Scan / chart slot"
         next_scan = now.replace(second=0, microsecond=0) + timedelta(minutes=1)
         return next_scan, "Scan (1-menit)"
 
@@ -214,9 +226,16 @@ def main():
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")
     logger.info("=" * 50)
-    logger.info(
-        f"Pola chart TF-D: {'realtime (tiap scan sesi)' if CHART_PATTERN_REALTIME else f'terjadwal {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB'}"
-    )
+    if CHART_PATTERN_REALTIME:
+        chart_mode = "realtime (tiap scan sesi)"
+    else:
+        chart_mode = (
+            f"terjadwal {CHART_PATTERN_ALERT_HOUR:02d}:"
+            f"{CHART_PATTERN_ALERT_MINUTE:02d} WIB (1×/hari)"
+        )
+    if CHART_PATTERN_FORCE_SCHEDULED_ONLY:
+        chart_mode += " [scheduled-only: env realtime diabaikan]"
+    logger.info(f"Pola chart TF-D: {chart_mode}")
     logger.info("Opening recap        : 08:45 WIB")
     logger.info("Scan interval   : 1 menit (08:46–15:59)")
     logger.info("Closing recap   : 16:00 WIB")
@@ -291,16 +310,15 @@ def main():
             market_close = _today_at(CLOSE_HOUR, CLOSE_MIN)
             eval_time    = _today_at(EVAL_HOUR,  EVAL_MIN)
 
-            chart_at = _today_at(CHART_PATTERN_ALERT_HOUR, CHART_PATTERN_ALERT_MINUTE)
-            chart_end = chart_at + timedelta(minutes=CHART_PATTERN_EXECUTION_WINDOW_MINUTES)
+            chart_at, chart_end = chart_pattern_slot_bounds(now)
 
-            # Pola chart terjadwal (mati jika CHART_PATTERN_REALTIME — pola jalan di run_scan)
+            # Pola chart terjadwal 1×/hari (tidak dari run_scan kecuali CHART_PATTERN_REALTIME)
             if (
                 not CHART_PATTERN_REALTIME
                 and weekday < 5
                 and not state_manager.morning_chart_patterns_already_scanned_today()
             ):
-                if chart_at <= now < chart_end:
+                if is_chart_pattern_alert_window(now):
                     logger.info(
                         f"📐 Alert pola chart TF-D (slot "
                         f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}, "
@@ -316,7 +334,7 @@ def main():
                         )
                         state_manager.mark_morning_chart_patterns_scan_complete()
                     continue
-                if now >= chart_end:
+                if now >= chart_end and now >= chart_at:
                     logger.info(
                         f"📐 Chart patterns: lewat jendela "
                         f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} "
