@@ -1,0 +1,20 @@
+[Unit]
+Description=IHSG Supertrend Scanner
+After=network.target
+
+[Service]
+Type=simple
+User=anugrahdwikiar
+WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
+# flock -n = gagal start jika scheduler sudah jalan (cegah 2 proses)
+ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
+  /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
+ExecStopPost=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
+Restart=on-failure
+RestartSec=15
+KillMode=control-group
+TimeoutStopSec=30
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

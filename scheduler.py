@@ -41,10 +41,27 @@ _SCHEDULER_LOCK_PATH = Path(_PROJECT_ROOT) / "database" / ".scheduler.lock"
 _lock_fd = None
 
 
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 def acquire_scheduler_lock() -> bool:
     """Satu instance scheduler per server (cegah alert dobel)."""
     global _lock_fd
     _SCHEDULER_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if _SCHEDULER_LOCK_PATH.exists():
+        try:
+            other = int(_SCHEDULER_LOCK_PATH.read_text().strip().split()[0])
+            if _pid_alive(other):
+                return False
+        except (ValueError, OSError):
+            pass
     if not _HAS_FCNTL:
         return True
     _lock_fd = open(_SCHEDULER_LOCK_PATH, "w")
@@ -52,6 +69,8 @@ def acquire_scheduler_lock() -> bool:
         fcntl.flock(_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return False
+    _lock_fd.seek(0)
+    _lock_fd.truncate()
     _lock_fd.write(str(os.getpid()))
     _lock_fd.flush()
     return True

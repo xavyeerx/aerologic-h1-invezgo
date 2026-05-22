@@ -175,10 +175,13 @@ After=network.target
 Type=simple
 User=anugrahdwikiar
 WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
-ExecStart=/home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
-Restart=always
-RestartSec=10
+# flock wajib — cegah 2 proses saat start ganda / restart cepat
+ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
+  /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
+Restart=on-failure
+RestartSec=15
 KillMode=control-group
+TimeoutStopSec=30
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
@@ -191,12 +194,15 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl stop ihsg-scanner
-pkill -f "ihsg-scanner.*scheduler.py" || true
+pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true
 sleep 3
+rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock
 ps aux | grep scheduler | grep -v grep
 # harus kosong
 
+sudo systemctl daemon-reload
 sudo systemctl start ihsg-scanner
+sleep 2
 ps aux | grep scheduler | grep -v grep
 # harus 1 baris saja
 
