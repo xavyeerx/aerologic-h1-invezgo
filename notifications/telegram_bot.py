@@ -18,6 +18,7 @@ from config.settings import (
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_FORCE_SCHEDULED_ONLY,
     CHART_PATTERN_REALTIME,
+    SCANNER_BUILD_ID,
 )
 
 logger = logging.getLogger(__name__)
@@ -198,9 +199,7 @@ def format_chart_pattern_morning_message(
     realtime: bool = False,
 ) -> str:
     """
-    Digest pola chart bullish (TF daily).
-    items: [{'ticker', 'pattern_key', 'label', 'price', 'change_pct', 'vol_vs_avg', 'rsi14'} ...]
-    realtime: True = dipicu dari scan sesi (bar harian bisa masih berjalan; pola dapat berubah).
+    Digest pola chart bullish (TF daily), selalu judul terjadwal (bukan realtime).
     """
     if not items:
         return ""
@@ -215,38 +214,24 @@ def format_chart_pattern_morning_message(
             "🧪 <b>MODE UJI TELEGRAM</b> • tidak menyentuh dedup / kuota sekali-scan harian •"
         )
 
-    title = (
-        "📐 <b>CHART PATTERNS — ALERT REALTIME (TF-D)</b>"
-        if realtime
-        else "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>"
-    )
+    slot = f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}"
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        title,
+        "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
     ]
     if badge:
         lines.extend([badge, ""])
-    if realtime:
-        lines.extend(
-            [
-                f"⏰ {get_current_time_wib()}",
-                "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
-                "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
-                "<i>Scan sesi: candle harian IDX belum tentu final; pola yang sama tidak diulang hari ini setelah terkirim.</i>",
-                "",
-            ]
-        )
-    else:
-        lines.extend(
-            [
-                f"⏰ {get_current_time_wib()}",
-                "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
-                "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
-                "<i>Heuristik otomatis. Mode terjadwal: candle harian yang sudah close (setelah bell = hari tersebut).</i>",
-                "",
-            ]
-        )
+    lines.extend(
+        [
+            f"⏰ {get_current_time_wib()}",
+            f"<i>Slot terjadwal: {slot} WIB (1×/hari) • build {SCANNER_BUILD_ID}</i>",
+            "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
+            "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
+            "<i>Heuristik otomatis. Candle harian setelah tutup IDX (hari perdagangan yang sama).</i>",
+            "",
+        ]
+    )
 
     for pkey in sorted(grouped.keys()):
         rows = grouped[pkey]
@@ -276,9 +261,7 @@ def send_chart_pattern_morning_digest(
     test_mode: bool = False,
     realtime: bool = False,
 ) -> bool:
-    if CHART_PATTERN_FORCE_SCHEDULED_ONLY:
-        realtime = False
-    msg = format_chart_pattern_morning_message(items, test_mode=test_mode, realtime=realtime)
+    msg = format_chart_pattern_morning_message(items, test_mode=test_mode, realtime=False)
     if not msg:
         if test_mode:
             nm = (
@@ -328,6 +311,7 @@ def send_startup_message():
 🤖 <b>IHSG SCANNER v5.0 STARTED</b>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ {get_current_time_wib()}
+🔖 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Scanner is now running.
 Scan interval: setiap 1 menit

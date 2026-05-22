@@ -12,6 +12,9 @@ from dotenv import load_dotenv
 # Load repo-root .env for local dev (does not override existing env vars)
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+# Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
+SCANNER_BUILD_ID = "20260522-chart-1645-only"
+
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
 # For local development: values below are used as fallback

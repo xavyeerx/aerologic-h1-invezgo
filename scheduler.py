@@ -37,6 +37,7 @@ from config.settings import (
     CHART_PATTERN_EXECUTION_WINDOW_MINUTES,
     CHART_PATTERN_FORCE_SCHEDULED_ONLY,
     CHART_PATTERN_REALTIME,
+    SCANNER_BUILD_ID,
     chart_pattern_slot_bounds,
     is_chart_pattern_alert_window,
 )
@@ -225,6 +226,7 @@ def main():
 
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")
+    logger.info(f"Build ID: {SCANNER_BUILD_ID}")
     logger.info("=" * 50)
     if CHART_PATTERN_REALTIME:
         chart_mode = "realtime (tiap scan sesi)"
