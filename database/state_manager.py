@@ -294,10 +294,36 @@ class StateManager:
             'hit_date': None,
             'score': result.score,
             'high_since_entry': result.price,
+            # Snapshot untuk replay format alert di evaluasi harian
+            'change_percent': getattr(result, 'change_percent', 0.0),
+            'volume_ratio': getattr(result, 'volume_ratio', 0.0),
+            'macd_status': getattr(result, 'macd_status', '') or '',
+            'obv_status': getattr(result, 'obv_status', '') or '',
+            'tp2_source': getattr(result, 'tp2_source', 'ATR') or 'ATR',
+            'correction_percent': getattr(result, 'correction_percent', 0.0),
+            'early_entry_strength': getattr(result, 'early_entry_strength', 0),
         }
         self._save_tracker(tracker)
         logger.info(f"[Tracker] Recorded {signal_type} for {result.ticker} "
                      f"@ {result.price:.0f} | TP1={getattr(result, 'tp1', 0):.0f} SL={sl_price:.0f}")
+
+    def get_today_alert_snapshots(self) -> Dict[str, List[dict]]:
+        """Sinyal yang pernah di-alert hari ini (untuk replay di evaluasi 16:30)."""
+        today = datetime.now().strftime('%Y-%m-%d')
+        grouped: Dict[str, List[dict]] = {
+            'strong_buy': [],
+            'accumulation': [],
+            'early_entry': [],
+        }
+        for sig in self._load_tracker().values():
+            if sig.get('alert_date') != today:
+                continue
+            st = sig.get('signal_type')
+            if st in grouped:
+                grouped[st].append(sig)
+        for st in grouped:
+            grouped[st].sort(key=lambda s: (s.get('alert_time', ''), s.get('ticker', '')))
+        return grouped
 
     def evaluate_signals(self, current_prices: dict) -> dict:
         """

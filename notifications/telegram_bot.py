@@ -76,6 +76,77 @@ def send_telegram_message(message: str) -> bool:
         return False
 
 
+class _AlertSnapshotView:
+    """Adaptor tracker → format alert yang sama seperti ScanResult."""
+
+    def __init__(self, sig: dict):
+        self.ticker = sig.get('ticker', '')
+        self.price = float(sig.get('entry_price', 0) or 0)
+        self.change_percent = float(sig.get('change_percent', 0) or 0)
+        self.score = int(sig.get('score', 0) or 0)
+        self.volume_ratio = float(sig.get('volume_ratio', 0) or 0)
+        self.macd_status = sig.get('macd_status', '') or '—'
+        self.obv_status = sig.get('obv_status', '') or '—'
+        self.tp1 = float(sig.get('tp1', 0) or 0)
+        self.tp2 = float(sig.get('tp2', 0) or 0)
+        self.tp2_source = sig.get('tp2_source', 'ATR') or 'ATR'
+        self.correction_percent = float(sig.get('correction_percent', 0) or 0)
+        self.early_entry_strength = int(sig.get('early_entry_strength', 0) or 0)
+        self.alert_time = sig.get('alert_time', '')
+
+
+def _snapshots_to_views(sigs: List[dict]) -> List[_AlertSnapshotView]:
+    return [_AlertSnapshotView(s) for s in sigs]
+
+
+def _format_today_alerts_replay(today_alerts: dict) -> List[str]:
+    """Blok HTML mirip alert asli, per tipe sinyal."""
+    sections: List[str] = []
+    sb = _snapshots_to_views(today_alerts.get('strong_buy') or [])
+    if sb:
+        msg = format_strong_buy_message(sb)
+        if msg:
+            times = ", ".join(sorted({v.alert_time for v in sb if v.alert_time}))
+            sections.append(
+                f"<i>🕐 Terkirim: {times or '—'} WIB</i>\n\n{msg}"
+            )
+    acc = _snapshots_to_views(today_alerts.get('accumulation') or [])
+    if acc:
+        msg = format_accumulation_message(acc)
+        if msg:
+            times = ", ".join(sorted({v.alert_time for v in acc if v.alert_time}))
+            sections.append(
+                f"<i>🕐 Terkirim: {times or '—'} WIB</i>\n\n{msg}"
+            )
+    ee = _snapshots_to_views(today_alerts.get('early_entry') or [])
+    if ee:
+        msg = format_early_entry_message(ee)
+        if msg:
+            times = ", ".join(sorted({v.alert_time for v in ee if v.alert_time}))
+            sections.append(
+                f"<i>🕐 Terkirim: {times or '—'} WIB</i>\n\n{msg}"
+            )
+    return sections
+
+
+def _send_long_message_parts(parts: List[str], header: str = "") -> None:
+    """Kirim pesan panjang ke Telegram (pecah jika > batas)."""
+    MAX_LENGTH = 3800
+    current = header
+    for part in parts:
+        chunk = part if not current else f"{current}\n\n{part}"
+        if len(chunk) > MAX_LENGTH and current.strip():
+            send_telegram_message(current.strip())
+            current = part
+        elif len(chunk) > MAX_LENGTH:
+            send_telegram_message(part[:MAX_LENGTH])
+            current = ""
+        else:
+            current = chunk
+    if current.strip():
+        send_telegram_message(current.strip())
+
+
 def _format_tp_info(r) -> str:
     """Format target price info (TP1, TP2, SL) for a stock"""
     lines = []
@@ -398,7 +469,7 @@ def send_daily_recap_message(daily_summary: dict):
     send_telegram_message(message)
 
 
-def send_evaluation_message(outcome: dict):
+def send_evaluation_message(outcome: dict, today_alerts: dict = None):
     """Send daily TP/SL evaluation recap at 16:30 WIB."""
     tp1_hit = outcome.get('tp1_hit', [])
     tp2_hit = outcome.get('tp2_hit', [])
@@ -406,8 +477,23 @@ def send_evaluation_message(outcome: dict):
     active = outcome.get('active', [])
 
     total_resolved = len(tp1_hit) + len(tp2_hit) + len(sl_hit)
-    if total_resolved == 0 and len(active) == 0:
+    has_history = bool(
+        today_alerts
+        and any(today_alerts.get(k) for k in ('strong_buy', 'accumulation', 'early_entry'))
+    )
+    if total_resolved == 0 and len(active) == 0 and not has_history:
         return
+
+    # Replay alert terkirim hari ini (format sama seperti saat sinyal keluar)
+    if has_history:
+        replay_header = (
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📋 <b>RIWAYAT ALERT HARI INI</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"⏰ {get_current_time_wib()}\n"
+            "<i>Detail seperti pesan Telegram saat sinyal terkirim.</i>"
+        )
+        _send_long_message_parts(_format_today_alerts_replay(today_alerts), replay_header)
 
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",

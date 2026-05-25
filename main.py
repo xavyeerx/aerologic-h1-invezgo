@@ -510,7 +510,8 @@ def run_daily_evaluation(state_manager: StateManager):
     state_manager.cleanup_old_signals(max_age_days=30)
 
     from notifications.telegram_bot import send_evaluation_message
-    send_evaluation_message(outcome)
+    today_alerts = state_manager.get_today_alert_snapshots()
+    send_evaluation_message(outcome, today_alerts=today_alerts)
 
     logger.info(f"Evaluation complete: {len(outcome['tp1_hit'])} TP1, "
                  f"{len(outcome['tp2_hit'])} TP2, {len(outcome['sl_hit'])} SL, "
