@@ -197,6 +197,7 @@ sudo systemctl stop ihsg-scanner
 pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true
 sleep 3
 rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock
+rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler_py.lock
 ps aux | grep scheduler | grep -v grep
 # harus kosong
 

@@ -6,9 +6,10 @@ After=network.target
 Type=simple
 User=anugrahdwikiar
 WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
-# flock -n = gagal start jika scheduler sudah jalan (cegah 2 proses)
+# flock systemd (.scheduler.lock) + lock Python (.scheduler_py.lock) — file berbeda
 ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
   /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
+ExecStartPre=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
 ExecStopPost=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
 Restart=on-failure
 RestartSec=15

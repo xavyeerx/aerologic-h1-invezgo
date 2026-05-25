@@ -37,7 +37,8 @@ except ImportError:
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _PROJECT_ROOT)
 
-_SCHEDULER_LOCK_PATH = Path(_PROJECT_ROOT) / "database" / ".scheduler.lock"
+# File terpisah dari flock systemd (.scheduler.lock) agar tidak bentrok → exit(1)
+_SCHEDULER_LOCK_PATH = Path(_PROJECT_ROOT) / "database" / ".scheduler_py.lock"
 _lock_fd = None
 
 

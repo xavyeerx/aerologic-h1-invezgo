@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260525-fix-signal-summary-keyerror"
+SCANNER_BUILD_ID = "20260525-fix-systemd-flock-lock"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
