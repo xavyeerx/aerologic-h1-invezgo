@@ -213,14 +213,17 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     all_signals = filter_signals(results)
     
     # Klaim alert harian sebelum Telegram (cegah dobel jika 2 scheduler / race menit sama)
-    new_signals = {}
+    new_signals = {
+        "strong_buy": [],
+        "accumulation": [],
+        "early_entry": [],
+    }
     for signal_type, signal_list in all_signals.items():
         claimed = []
         for r in signal_list:
             if state_manager.try_claim_daily_alert(signal_type, r.ticker):
                 claimed.append(r)
-        if claimed:
-            new_signals[signal_type] = claimed
+        new_signals[signal_type] = claimed
         if len(signal_list) > 0:
             logger.info(
                 f"  {signal_type}: {len(signal_list)} total, {len(claimed)} claimed to send"
@@ -262,9 +265,9 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     stocks_count = len(results)
     summary = {
         'stocks_scanned': stocks_count,
-        'strong_buys': len(new_signals['strong_buy']),
-        'accumulations': len(new_signals['accumulation']),
-        'early_entries': len(new_signals['early_entry']),
+        'strong_buys': len(new_signals.get('strong_buy', [])),
+        'accumulations': len(new_signals.get('accumulation', [])),
+        'early_entries': len(new_signals.get('early_entry', [])),
         'chart_pattern_new_rows': 0,
         'timestamp': datetime.now(WIB).isoformat()
     }

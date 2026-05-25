@@ -415,8 +415,10 @@ def main():
                 try:
                     run_scan(state_manager, force=False)
                 except Exception as e:
-                    logger.error(f"Scan error: {e}")
-                    send_telegram_message(f"⚠️ Scanner Error: {e}")
+                    logger.exception("Scan error")
+                    send_telegram_message(
+                        f"⚠️ Scanner Error: {type(e).__name__}: {e}"
+                    )
                 # Tidur 1 menit setelah scan
                 time.sleep(SCAN_INTERVAL_SEC)
                 continue
