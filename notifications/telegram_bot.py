@@ -14,6 +14,7 @@ from config.settings import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
     BUY_THRESHOLD,
+    ENGULF_MIN_VOLUME_RATIO,
     CHART_PATTERN_ALERT_HOUR,
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_FORCE_SCHEDULED_ONLY,
@@ -126,7 +127,7 @@ def format_strong_buy_message(results: List) -> str:
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(
-        f"💡 <i>Bullish engulfing ATAU volume anomali + breakout (score ≥ {BUY_THRESHOLD})</i>"
+        f"💡 <i>Engulfing + vol ≥{ENGULF_MIN_VOLUME_RATIO}× MA20 ATAU spike/anomali + breakout (score ≥ {BUY_THRESHOLD})</i>"
     )
     lines.append(f"Total: {len(results)} saham strong buy")
     

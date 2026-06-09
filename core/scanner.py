@@ -188,12 +188,14 @@ def analyze_stock(
         is_bullish_trend = latest['direction'] == 1
         result.is_bullish_engulfing = bool(latest.get('bullish_engulfing', False))
         result.is_price_breakout = bool(latest.get('price_breakout', False))
+        vol_ratio = float(latest.get('volume_ratio', 0.0) or 0.0)
         has_volume_signal = bool(
             latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
         )
+        engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
 
         # ── STRONG BUY v6: volume + breakout + bullish engulfing ─────────
-        if result.is_bullish_engulfing:
+        if result.is_bullish_engulfing and engulf_volume_ok:
             result.is_strong_buy = True
         elif (
             has_volume_signal
