@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260609-engulf-vol1x"
+SCANNER_BUILD_ID = "20260610-scan-continuous"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
@@ -100,13 +100,13 @@ ACCUMULATE_THRESHOLD = 50
 HOLD_THRESHOLD = 40
 
 # === SCANNER SETTINGS ===
-SCAN_INTERVAL_MINUTES = 1  # Scan every 1 minute
+SCAN_INTERVAL_MINUTES = 0  # 0 = back-to-back saat sesi buka (scheduler tidak idle antar scan)
 DATA_PERIOD = "90d"   # Target lebar seri (~90 sesi IDX); Yahoo: tambah buffer kalender di data_fetcher
 DATA_INTERVAL = "1d"  # DAILY candlestick for ALL signals
 
 # === TRADING HOURS (WIB) ===
 TRADING_START_HOUR = 8
-TRADING_START_MINUTE = 45
+TRADING_START_MINUTE = 30
 TRADING_END_HOUR = 16
 TRADING_END_MINUTE = 0
 
@@ -167,7 +167,7 @@ def _env_bool(name: str, default: bool) -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
-# True: deteksi pola chart tiap siklus scan (08:46–15:59). False: hanya slot terjadwal CHART_PATTERN_ALERT_*.
+# True: deteksi pola chart tiap siklus scan (08:30–16:00). False: hanya slot terjadwal CHART_PATTERN_ALERT_*.
 # CHART_PATTERN_FORCE_SCHEDULED_ONLY (default True) mengabaikan env realtime — pola chart 1×/hari saja.
 CHART_PATTERN_FORCE_SCHEDULED_ONLY = _env_bool("CHART_PATTERN_FORCE_SCHEDULED_ONLY", True)
 CHART_PATTERN_REALTIME = (

@@ -66,7 +66,7 @@ def is_trading_hours() -> bool:
     if now.weekday() >= 5:
         return False
     
-    # Check trading hours (08:45 - 16:00 WIB)
+    # Check trading hours (08:30 - 16:00 WIB)
     current_time = now.hour * 100 + now.minute
     start_time = TRADING_START_HOUR * 100 + TRADING_START_MINUTE
     end_time = TRADING_END_HOUR * 100 + TRADING_END_MINUTE
@@ -75,7 +75,7 @@ def is_trading_hours() -> bool:
 
 
 def is_market_open_time() -> bool:
-    """Check if current time is market open time (08:45) — for opening recap"""
+    """Check if current time is market open time (08:30) — for opening recap"""
     now = datetime.now(WIB)
     return now.hour == TRADING_START_HOUR and now.minute == TRADING_START_MINUTE
 
@@ -359,7 +359,7 @@ def run_morning_chart_pattern_scan(state_manager: StateManager, stock_data=None,
 
 def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     """
-    Run a full recap scan at market open (08:45) or close (16:00).
+    Run a full recap scan at market open (08:30) or close (16:00).
     This scans ALL stocks and sends a comprehensive overview.
     No duplicate check here — this is a full overview, sent only once.
     """

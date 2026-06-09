@@ -334,8 +334,8 @@ def send_startup_message():
 🔖 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Scanner is now running.
-Scan interval: setiap 1 menit
-Trading hours: 08:45 - 16:00 WIB
+Scan interval: back-to-back (langsung setelah selesai)
+Trading hours: 08:30 - 16:00 WIB
 
 📊 Alerts:
 • 📐 Chart Patterns — {_chart_pattern_mode_line()}
