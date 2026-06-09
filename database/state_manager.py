@@ -4,7 +4,7 @@
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional, List
 import logging
 import threading
@@ -256,6 +256,7 @@ class StateManager:
     # ============================================
 
     _TRACKER_FILE = "database/signal_tracker.json"
+    _ARB_COOLDOWN_FILE = "database/arb_cooldown.json"
 
     def _load_tracker(self) -> dict:
         try:
@@ -272,6 +273,59 @@ class StateManager:
                 json.dump(tracker, f, indent=2, default=str)
         except Exception as e:
             logger.error(f"Error saving signal tracker: {e}")
+
+    def _load_arb_cooldowns(self) -> dict:
+        try:
+            if os.path.exists(self._ARB_COOLDOWN_FILE):
+                with open(self._ARB_COOLDOWN_FILE, encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading ARB cooldowns: {e}")
+        return {}
+
+    def _save_arb_cooldowns(self, data: dict) -> None:
+        try:
+            os.makedirs(os.path.dirname(self._ARB_COOLDOWN_FILE) or ".", exist_ok=True)
+            with open(self._ARB_COOLDOWN_FILE, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving ARB cooldowns: {e}")
+
+    def was_ticker_alerted_recently(self, ticker: str, lookback_days: int = 45) -> bool:
+        """Pernah dapat alert (signal_tracker) dalam N hari terakhir."""
+        from config.settings import ARB_PRIOR_ALERT_LOOKBACK_DAYS
+
+        lookback_days = lookback_days or ARB_PRIOR_ALERT_LOOKBACK_DAYS
+        cutoff = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+        for sig in self._load_tracker().values():
+            if sig.get("ticker") != ticker:
+                continue
+            if (sig.get("alert_date") or "") >= cutoff:
+                return True
+        return False
+
+    def is_in_arb_cooldown(self, ticker: str) -> bool:
+        return ticker in self._load_arb_cooldowns()
+
+    def mark_arb_cooldown(self, ticker: str, change_percent: float) -> None:
+        data = self._load_arb_cooldowns()
+        if ticker in data:
+            return
+        data[ticker] = {
+            "since": datetime.now().strftime("%Y-%m-%d"),
+            "arb_change_pct": round(float(change_percent), 2),
+        }
+        self._save_arb_cooldowns(data)
+        logger.info(
+            f"[ARB] Cooldown {ticker} (pasca-alert, turun {change_percent:.1f}%)"
+        )
+
+    def clear_arb_cooldown(self, ticker: str) -> None:
+        data = self._load_arb_cooldowns()
+        if ticker not in data:
+            return
+        del data[ticker]
+        self._save_arb_cooldowns(data)
 
     def track_signal(self, result, signal_type: str):
         """Record a new signal with entry price, TP1, TP2, SL for outcome tracking."""

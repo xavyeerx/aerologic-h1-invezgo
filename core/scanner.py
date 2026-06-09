@@ -12,6 +12,7 @@ from .supertrend import calculate_supertrend, is_bullish, just_turned_bullish, j
 from .indicators import calculate_all_indicators
 from .scoring import calculate_total_score
 from .data_fetcher import compute_session_change_percent
+from .arb_filter import apply_post_alert_arb_gate
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +68,12 @@ class ScanResult:
         self.atr_pct = 0.0                 # ATR / close × 100 (relatif volatility)
 
 
-def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) -> ScanResult:
+def analyze_stock(
+    ticker: str,
+    df: pd.DataFrame,
+    previous_state: dict = None,
+    state_manager=None,
+) -> ScanResult:
     """
     Analyze a single stock and detect signals (v5 logic)
     """
@@ -273,6 +279,8 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
         # EARLY ENTRY = Bullish + Dry Correction + (Price Holding OR Early Buying)
         if is_bullish_trend and is_dry_correction and (is_price_holding or has_early_buying):
             result.is_early_entry = True
+
+        apply_post_alert_arb_gate(result, df, state_manager)
         
     except Exception as e:
         logger.error(f"Error analyzing {ticker}: {str(e)}")
@@ -280,14 +288,18 @@ def analyze_stock(ticker: str, df: pd.DataFrame, previous_state: dict = None) ->
     return result
 
 
-def scan_all_stocks(stock_data: Dict[str, pd.DataFrame], previous_states: dict = None) -> Dict[str, ScanResult]:
+def scan_all_stocks(
+    stock_data: Dict[str, pd.DataFrame],
+    previous_states: dict = None,
+    state_manager=None,
+) -> Dict[str, ScanResult]:
     """Scan all stocks and return results"""
     results = {}
     previous_states = previous_states or {}
     
     for ticker, df in stock_data.items():
         prev_state = previous_states.get(ticker, {})
-        result = analyze_stock(ticker, df, prev_state)
+        result = analyze_stock(ticker, df, prev_state, state_manager=state_manager)
         results[ticker] = result
     
     return results

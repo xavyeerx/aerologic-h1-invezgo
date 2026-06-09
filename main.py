@@ -199,7 +199,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
 
     # Scan all stocks
     logger.info("Analyzing stocks...")
-    results = scan_all_stocks(stock_data, previous_states)
+    results = scan_all_stocks(stock_data, previous_states, state_manager=state_manager)
 
     # ── Ambil kondisi pasar IHSG (untuk learning tracking) ───────────
     regime_info = {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
@@ -385,7 +385,7 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
     
     # Scan all stocks
     logger.info("Analyzing stocks for recap...")
-    results = scan_all_stocks(stock_data, previous_states)
+    results = scan_all_stocks(stock_data, previous_states, state_manager=state_manager)
     
     # ✅ FREE MEMORY: release large DataFrames immediately after scan
     del stock_data
