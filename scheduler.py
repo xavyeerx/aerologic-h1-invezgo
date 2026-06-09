@@ -273,8 +273,12 @@ def main():
 
     if not acquire_scheduler_lock():
         logger.error(
-            "Scheduler lain sudah berjalan (database/.scheduler.lock). "
-            "Hentikan proses duplikat: pkill -f ihsg-scanner.*scheduler.py lalu restart systemd."
+            "Scheduler lain sudah berjalan atau lock tertinggal "
+            "(database/.scheduler_py.lock). "
+            "Fix: sudo systemctl stop ihsg-scanner && "
+            "pkill -f ihsg-scanner/scheduler.py; "
+            "rm -f database/.scheduler.lock database/.scheduler_py.lock; "
+            "sudo systemctl start ihsg-scanner"
         )
         sys.exit(1)
 
@@ -466,4 +470,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except SystemExit:
+        raise
+    except Exception:
+        logger.exception("Scheduler gagal start")
+        raise

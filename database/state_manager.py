@@ -292,7 +292,7 @@ class StateManager:
             logger.error(f"Error saving ARB cooldowns: {e}")
 
     @staticmethod
-    def _previous_trading_date(from_day: datetime | None = None) -> str:
+    def _previous_trading_date(from_day: Optional[datetime] = None) -> str:
         """Tanggal sesi IDX sebelumnya (skip Sabtu/Minggu)."""
         day = (from_day or datetime.now()).date()
         d = day - timedelta(days=1)

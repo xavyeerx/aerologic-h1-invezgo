@@ -9,7 +9,7 @@ WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
 # flock systemd (.scheduler.lock) + lock Python (.scheduler_py.lock) — file berbeda
 ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
   /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
-ExecStartPre=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
+ExecStartPre=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true; rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler_py.lock'
 ExecStopPost=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
 Restart=on-failure
 RestartSec=15
