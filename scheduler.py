@@ -26,9 +26,12 @@ import os
 from datetime import datetime, timedelta
 import pytz
 
-# Add project root to path
+# Add project root to path (absolut — systemd tidak selalu set WorkingDirectory)
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _PROJECT_ROOT)
+_LOG_DIR = os.path.join(_PROJECT_ROOT, "logs")
+_SCHEDULER_LOG = os.path.join(_LOG_DIR, "scheduler.log")
+os.makedirs(_LOG_DIR, exist_ok=True)
 
 WIB = pytz.timezone('Asia/Jakarta')
 
@@ -67,7 +70,7 @@ logging.basicConfig(
     handlers=[
         logging.StreamHandler(),
         logging.handlers.RotatingFileHandler(
-            'logs/scheduler.log',
+            _SCHEDULER_LOG,
             encoding='utf-8',
             maxBytes=5 * 1024 * 1024,  # 5 MB max
             backupCount=3
@@ -221,9 +224,7 @@ def main():
     """Main scheduler loop — pendekatan smart sleep."""
     global _LEARNING_OK
 
-    # Ensure directories exist
-    os.makedirs('logs', exist_ok=True)
-    os.makedirs('database', exist_ok=True)
+    os.makedirs(os.path.join(_PROJECT_ROOT, "database"), exist_ok=True)
 
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")

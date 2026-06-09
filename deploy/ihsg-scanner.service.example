@@ -6,15 +6,16 @@ After=network.target
 Type=simple
 User=anugrahdwikiar
 WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
-# flock systemd (.scheduler.lock) + lock Python (.scheduler_py.lock) — file berbeda
-ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
-  /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
+# Satu instance: flock di .scheduler.lock (Python lock sudah dihapus — jangan pakai .scheduler_py.lock)
 ExecStartPre=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true; rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock /home/anugrahdwikiar/ihsg-scanner/database/.scheduler_py.lock'
-ExecStopPost=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true'
+ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
+ExecStopPost=-/bin/sh -c 'pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true; rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock /home/anugrahdwikiar/ihsg-scanner/database/.scheduler_py.lock'
 Restart=on-failure
 RestartSec=15
 KillMode=control-group
 TimeoutStopSec=30
+StandardOutput=journal
+StandardError=journal
 Environment=PYTHONUNBUFFERED=1
 
 [Install]
