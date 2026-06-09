@@ -21,6 +21,7 @@
 import time
 import logging
 import logging.handlers
+import subprocess
 import sys
 import os
 from datetime import datetime, timedelta
@@ -220,11 +221,50 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
     return next_pre_open, "Pre-wake besok (08:40)"
 
 
+def _other_scheduler_pids() -> list[int]:
+    """Proses scheduler.py lain di repo ini (bukan PID saat ini)."""
+    try:
+        marker = os.path.join(_PROJECT_ROOT, "scheduler.py")
+        r = subprocess.run(
+            ["pgrep", "-f", marker],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if r.returncode != 0:
+            return []
+        me = os.getpid()
+        out = []
+        for line in r.stdout.split():
+            line = line.strip()
+            if line.isdigit():
+                pid = int(line)
+                if pid != me:
+                    out.append(pid)
+        return out
+    except Exception:
+        return []
+
+
+def ensure_single_scheduler_process() -> None:
+    peers = _other_scheduler_pids()
+    if peers:
+        logger.error(
+            "Scheduler duplikat (PID lain: %s). Hanya jalankan via systemd. "
+            "Fix: sudo systemctl stop ihsg-scanner && "
+            "pkill -f 'ihsg-scanner/scheduler.py' && "
+            "sudo systemctl start ihsg-scanner",
+            peers,
+        )
+        sys.exit(1)
+
+
 def main():
     """Main scheduler loop — pendekatan smart sleep."""
     global _LEARNING_OK
 
     os.makedirs(os.path.join(_PROJECT_ROOT, "database"), exist_ok=True)
+    ensure_single_scheduler_process()
 
     logger.info("=" * 50)
     logger.info("IHSG SUPERTREND SCANNER v5.0 - SCHEDULER (Smart Sleep)")

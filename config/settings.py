@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260609-systemd-abs-log"
+SCANNER_BUILD_ID = "20260609-dedup-pgrep"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
