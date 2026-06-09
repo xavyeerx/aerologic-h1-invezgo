@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260525-post-alert-arb-gate"
+SCANNER_BUILD_ID = "20260525-arb-latest-call-only"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
@@ -67,9 +67,8 @@ MOMENTUM_PERIOD = 10
 CONFIRMATION_BARS = 2
 
 # === POST-ALERT ARB FILTER (IDX) ===
-# Saham pernah di-call → besok ARB (turun >= 13%) → jangan alert lagi sampai candle hijau
+# Call kemarin → hari ini ARB (turun >= 13%) → skip alert sampai candle hijau
 ARB_DROP_PCT_MIN = 13.0
-ARB_PRIOR_ALERT_LOOKBACK_DAYS = 45
 
 # === SUPPORT/RESISTANCE ===
 PIVOT_LOOKBACK = 10

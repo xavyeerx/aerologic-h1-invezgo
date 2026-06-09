@@ -291,18 +291,37 @@ class StateManager:
         except Exception as e:
             logger.error(f"Error saving ARB cooldowns: {e}")
 
-    def was_ticker_alerted_recently(self, ticker: str, lookback_days: int = 45) -> bool:
-        """Pernah dapat alert (signal_tracker) dalam N hari terakhir."""
-        from config.settings import ARB_PRIOR_ALERT_LOOKBACK_DAYS
+    @staticmethod
+    def _previous_trading_date(from_day: datetime | None = None) -> str:
+        """Tanggal sesi IDX sebelumnya (skip Sabtu/Minggu)."""
+        day = (from_day or datetime.now()).date()
+        d = day - timedelta(days=1)
+        while d.weekday() >= 5:
+            d -= timedelta(days=1)
+        return d.strftime("%Y-%m-%d")
 
-        lookback_days = lookback_days or ARB_PRIOR_ALERT_LOOKBACK_DAYS
-        cutoff = (datetime.now() - timedelta(days=lookback_days)).strftime("%Y-%m-%d")
+    def get_latest_alert_for_ticker(self, ticker: str) -> Optional[dict]:
+        """Entri alert terbaru untuk ticker (dari signal_tracker)."""
+        best: Optional[dict] = None
+        best_key = ("", "")
         for sig in self._load_tracker().values():
             if sig.get("ticker") != ticker:
                 continue
-            if (sig.get("alert_date") or "") >= cutoff:
-                return True
-        return False
+            key = (sig.get("alert_date") or "", sig.get("alert_time") or "")
+            if key > best_key:
+                best_key = key
+                best = sig
+        return best
+
+    def was_latest_call_previous_session(self, ticker: str) -> bool:
+        """
+        True jika call TERAKHIR ticker jatuh pada sesi perdagangan sebelumnya.
+        Contoh: call Senin → filter ARB aktif Selasa (bukan 45 hari ke belakang).
+        """
+        latest = self.get_latest_alert_for_ticker(ticker)
+        if not latest:
+            return False
+        return latest.get("alert_date") == self._previous_trading_date()
 
     def is_in_arb_cooldown(self, ticker: str) -> bool:
         return ticker in self._load_arb_cooldowns()
@@ -311,13 +330,17 @@ class StateManager:
         data = self._load_arb_cooldowns()
         if ticker in data:
             return
+        latest = self.get_latest_alert_for_ticker(ticker) or {}
         data[ticker] = {
             "since": datetime.now().strftime("%Y-%m-%d"),
             "arb_change_pct": round(float(change_percent), 2),
+            "trigger_alert_date": latest.get("alert_date"),
+            "trigger_signal_type": latest.get("signal_type"),
         }
         self._save_arb_cooldowns(data)
         logger.info(
-            f"[ARB] Cooldown {ticker} (pasca-alert, turun {change_percent:.1f}%)"
+            f"[ARB] Cooldown {ticker} (call {latest.get('alert_date')} → ARB "
+            f"{change_percent:.1f}%)"
         )
 
     def clear_arb_cooldown(self, ticker: str) -> None:
