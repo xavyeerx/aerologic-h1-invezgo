@@ -113,14 +113,21 @@ def format_strong_buy_message(results: List) -> str:
         ticker_clean = r.ticker.replace('.JK', '')
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-        lines.append(f"   └─ Score: {r.score} | MACD: {r.macd_status} | Vol: {r.volume_ratio:.1f}x")
+        trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
+            "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+        )
+        lines.append(
+            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | {r.pattern_name or '-'}"
+        )
         tp_info = _format_tp_info(r)
         if tp_info:
             lines.append(tp_info)
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"💡 <i>Breakout terkonfirmasi + score ≥ {BUY_THRESHOLD}</i>")
+    lines.append(
+        f"💡 <i>Bullish engulfing ATAU volume anomali + breakout (score ≥ {BUY_THRESHOLD})</i>"
+    )
     lines.append(f"Total: {len(results)} saham strong buy")
     
     return "\n".join(lines)

@@ -169,10 +169,16 @@ def calculate_candlestick_patterns(df: pd.DataFrame) -> pd.DataFrame:
     is_bullish_trend = direction == 1
     is_bearish_trend = direction == -1
 
-    df['bullish_engulfing'] = (is_bear1 & is_bull &
-                               (df['close'] > df['open'].shift(1)) &
-                               (df['open']  < df['close'].shift(1)) &
-                               (body > body1))
+    # Bullish engulfing: candle merah kecil → hijau besar menelan body candle 1
+    small_bear_body = is_bear1 & (body1 > 0) & (body > body1 * 1.2)
+    large_bull_body = is_bull & (body > body1 * 1.2)
+    engulfs_prior_body = (
+        (df['open'] <= df['close'].shift(1)) &
+        (df['close'] >= df['open'].shift(1))
+    )
+    df['bullish_engulfing'] = (
+        small_bear_body & large_bull_body & engulfs_prior_body
+    )
     df['bearish_engulfing'] = (is_bull1 & is_bear &
                                (df['close'] < df['open'].shift(1)) &
                                (df['open']  > df['close'].shift(1)) &
@@ -227,6 +233,16 @@ def _pivot_low_vectorized(low: pd.Series, lookback: int) -> pd.Series:
         if lows[i] == window.min():
             result[i] = lows[i]
     return pd.Series(result, index=low.index)
+
+
+def calculate_price_breakout(df: pd.DataFrame, lookback: int = BREAKOUT_LOOKBACK) -> pd.DataFrame:
+    """Breakout harga: close > highest high N bar sebelumnya (tanpa supertrend)."""
+    if len(df) < 2:
+        df['price_breakout'] = False
+        return df
+    prior_high = df['high'].shift(1).rolling(window=lookback, min_periods=max(5, lookback // 2)).max()
+    df['price_breakout'] = df['close'] > prior_high
+    return df
 
 
 def calculate_support_resistance(df: pd.DataFrame, lookback: int = PIVOT_LOOKBACK) -> pd.DataFrame:
@@ -543,6 +559,7 @@ def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     calculate_dca_zones(df)
     calculate_candlestick_patterns(df)
     calculate_support_resistance(df)
+    calculate_price_breakout(df)
     calculate_divergence(df)
     calculate_targets(df)
     return df

@@ -21,16 +21,19 @@ def calculate_trend_score(df: pd.DataFrame) -> float:
     row = df.iloc[-1]
     score = 0.0
     
-    # Bullish trend: +10
-    if row.get('direction', -1) == 1:
+    bullish_trend = (
+        row.get('direction', -1) == 1
+        if USE_SUPERTREND
+        else bool(row.get('ema_bullish_alignment', False) or row.get('price_above_ema50', False))
+    )
+
+    if bullish_trend:
         score += 10.0
-    
-    # EMA alignment bullish: +10
+
     if row.get('ema_bullish_alignment', False):
         score += 10.0
-    
-    # Trend aligned (simplified for daily TF - always true if bullish): +5
-    if row.get('direction', -1) == 1:
+
+    if bullish_trend:
         score += 5.0
     
     return min(score, 25.0)
@@ -74,7 +77,12 @@ def calculate_volume_score(df: pd.DataFrame) -> float:
         score += 7.0
     
     # OBV bullish + bullish trend: +4 (NEW v5)
-    if row.get('obv_bullish', False) and row.get('direction', -1) == 1:
+    obv_bullish_trend = (
+        row.get('direction', -1) == 1
+        if USE_SUPERTREND
+        else bool(row.get('price_above_ema20', False))
+    )
+    if row.get('obv_bullish', False) and obv_bullish_trend:
         score += 4.0
     
     return min(score, 18.0)
@@ -101,7 +109,12 @@ def calculate_momentum_score(df: pd.DataFrame) -> float:
     stoch_cross_up = row.get('stoch_k_cross_up', False)
     stoch_cross_valid = stoch_cross_up and stoch_k < ACCUM_STOCH_CROSS_K_MAX
     stoch_zone = stoch_k < ACCUM_STOCH_K_MAX
-    if row.get('direction', -1) == 1 and (stoch_cross_valid or stoch_zone):
+    mom_bullish = (
+        row.get('direction', -1) == 1
+        if USE_SUPERTREND
+        else bool(row.get('price_above_ema50', False))
+    )
+    if mom_bullish and (stoch_cross_valid or stoch_zone):
         score += 8.0
     
     # MACD bullish: +5 (NEW v5, replaces stoch_neutral)
@@ -142,8 +155,9 @@ def calculate_pattern_score(df: pd.DataFrame) -> float:
     row = df.iloc[-1]
     score = 0.0
     
-    # Bullish candlestick pattern: +3
-    if row.get('bullish_pattern', False):
+    if row.get('bullish_engulfing', False):
+        score += 5.0
+    elif row.get('bullish_pattern', False):
         score += 3.0
     
     # Bullish divergence: +1 to +4 based on strength

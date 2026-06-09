@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260609-dedup-pgrep"
+SCANNER_BUILD_ID = "20260609-volume-breakout-v6"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
@@ -22,9 +22,14 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
 
 # === SUPERTREND SETTINGS ===
-# Same as Pine Script v3
+# Same as Pine Script v3 — set True untuk aktifkan lagi (strong buy lama pakai konfirmasi bar ST)
+USE_SUPERTREND = False
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
+
+# === BREAKOUT (tanpa supertrend) ===
+# Close > high N hari sebelumnya (exclude bar hari ini)
+BREAKOUT_LOOKBACK = 20
 
 # === EMA SETTINGS ===
 EMA_FAST = 20
@@ -63,7 +68,7 @@ MACD_SIGNAL = 9
 # === MOMENTUM SETTINGS ===
 MOMENTUM_PERIOD = 10
 
-# === FALSE BREAKOUT FILTER ===
+# === FALSE BREAKOUT FILTER (hanya dipakai jika USE_SUPERTREND=True) ===
 CONFIRMATION_BARS = 2
 
 # === POST-ALERT ARB FILTER (IDX) ===

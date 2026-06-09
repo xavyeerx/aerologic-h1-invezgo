@@ -8,8 +8,8 @@ from typing import Dict, List, Tuple
 import logging
 
 from config.settings import *
-from .supertrend import calculate_supertrend, is_bullish, just_turned_bullish, just_turned_bearish
-from .indicators import calculate_all_indicators
+from .supertrend import calculate_supertrend  # just_turned_bullish: dipakai jika USE_SUPERTREND=True
+from .indicators import calculate_all_indicators, calculate_candlestick_patterns
 from .scoring import calculate_total_score
 from .data_fetcher import compute_session_change_percent
 from .arb_filter import apply_post_alert_arb_gate
@@ -61,6 +61,8 @@ class ScanResult:
         self.is_trending = False
         self.support = 0.0
         self.resistance = 0.0
+        self.is_bullish_engulfing = False
+        self.is_price_breakout = False
 
         # Learning features (Phase 1 — dicatat ke DB)
         self.bars_since_breakout = 0       # candle sejak supertrend flip bullish
@@ -90,10 +92,22 @@ def analyze_stock(
         result.daily_turnover = df['turnover'].iloc[-1]
         result.avg_turnover_5d = avg_turnover_5d
         
-        # Calculate all indicators (v5)
-        df = calculate_supertrend(df)
+        # ── Supertrend (opsional — USE_SUPERTREND di settings) ──────────────
+        if USE_SUPERTREND:
+            df = calculate_supertrend(df)
         df = calculate_all_indicators(df)
-        
+        if not USE_SUPERTREND:
+            # Proxy trend dari EMA (ganti direction supertrend untuk scoring/akumulasi)
+            df['direction'] = np.where(
+                df['ema_bullish_alignment'] | (df['close'] > df['ema50']),
+                1,
+                -1,
+            ).astype(int)
+            df['supertrend'] = np.nan
+            df['bullish_break'] = False
+            df['bearish_break'] = False
+            calculate_candlestick_patterns(df)
+
         latest = df.iloc[-1]
         
         # Basic info
@@ -117,21 +131,22 @@ def analyze_stock(
         result.resistance = latest.get('resistance', 0.0)
 
         # ── Learning features ──────────────────────────────────────
-        # bars_since_breakout: hitung candle berturut sejak direction flip ke 1
-        bars_since_breakout = 0
-        for i in range(len(df) - 1, -1, -1):
-            if df.iloc[i]['direction'] == 1:
-                bars_since_breakout += 1
-            else:
-                break
-        result.bars_since_breakout = bars_since_breakout
-
-        # price_vs_supertrend_pct: seberapa jauh harga di atas supertrend (%)
-        st_val = latest.get('supertrend', 0.0)
-        if st_val and st_val > 0:
-            result.price_vs_supertrend_pct = round(
-                (latest['close'] - st_val) / st_val * 100, 2
-            )
+        if USE_SUPERTREND:
+            bars_since_breakout = 0
+            for i in range(len(df) - 1, -1, -1):
+                if df.iloc[i]['direction'] == 1:
+                    bars_since_breakout += 1
+                else:
+                    break
+            result.bars_since_breakout = bars_since_breakout
+            st_val = latest.get('supertrend', 0.0)
+            if st_val and st_val > 0:
+                result.price_vs_supertrend_pct = round(
+                    (latest['close'] - st_val) / st_val * 100, 2
+                )
+        else:
+            result.bars_since_breakout = 0
+            result.price_vs_supertrend_pct = 0.0
 
         # atr_pct: volatilitas relatif (ATR / harga × 100)
         result.atr_pct = round(float(latest.get('atr_percent', 0.0)), 2)
@@ -167,44 +182,49 @@ def analyze_stock(
         result.score, result.status, result.status_emoji = calculate_total_score(df)
         
         # ═══════════════════════════════════════════
-        # SIGNAL DETECTION v5
+        # SIGNAL DETECTION
         # ═══════════════════════════════════════════
-        
-        # 1. STRONG BUY (logika v5 asli: konfirmasi bar + breakout/flip + skor)
+
         is_bullish_trend = latest['direction'] == 1
-        breakout_up = just_turned_bullish(df)
+        result.is_bullish_engulfing = bool(latest.get('bullish_engulfing', False))
+        result.is_price_breakout = bool(latest.get('price_breakout', False))
+        has_volume_signal = bool(
+            latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
+        )
 
-        if is_bullish_trend:
-            bars_above = 0
-            for i in range(len(df) - 1, max(len(df) - CONFIRMATION_BARS - 5, 0), -1):
-                if df.iloc[i]['direction'] == 1 and df.iloc[i]['close'] > df.iloc[i]['supertrend']:
-                    bars_above += 1
-                else:
-                    break
-            breakout_confirmed = bars_above >= CONFIRMATION_BARS
-        else:
-            breakout_confirmed = False
-
-        recent_breakout = False
-        for i in range(1, min(CONFIRMATION_BARS + 2, len(df))):
-            idx = len(df) - 1 - i
-            if idx >= 1:
-                prev_dir = df.iloc[idx - 1]['direction']
-                curr_dir = df.iloc[idx]['direction']
-                if prev_dir == -1 and curr_dir == 1:
-                    recent_breakout = True
-                    break
-
-        if breakout_up:
-            recent_breakout = True
-
-        if (
-            is_bullish_trend
-            and (breakout_confirmed or breakout_up)
-            and recent_breakout
+        # ── STRONG BUY v6: volume + breakout + bullish engulfing ─────────
+        if result.is_bullish_engulfing:
+            result.is_strong_buy = True
+        elif (
+            has_volume_signal
+            and result.is_price_breakout
             and result.score >= BUY_THRESHOLD
         ):
             result.is_strong_buy = True
+
+        # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
+        # if USE_SUPERTREND:
+        #     breakout_up = just_turned_bullish(df)
+        #     if is_bullish_trend:
+        #         bars_above = 0
+        #         for i in range(len(df) - 1, max(len(df) - CONFIRMATION_BARS - 5, 0), -1):
+        #             if df.iloc[i]['direction'] == 1 and df.iloc[i]['close'] > df.iloc[i]['supertrend']:
+        #                 bars_above += 1
+        #             else:
+        #                 break
+        #         breakout_confirmed = bars_above >= CONFIRMATION_BARS
+        #     else:
+        #         breakout_confirmed = False
+        #     recent_breakout = False
+        #     for i in range(1, min(CONFIRMATION_BARS + 2, len(df))):
+        #         idx = len(df) - 1 - i
+        #         if idx >= 1 and df.iloc[idx - 1]['direction'] == -1 and df.iloc[idx]['direction'] == 1:
+        #             recent_breakout = True
+        #             break
+        #     if breakout_up:
+        #         recent_breakout = True
+        #     if is_bullish_trend and (breakout_confirmed or breakout_up) and recent_breakout and result.score >= BUY_THRESHOLD:
+        #         result.is_strong_buy = True
 
         # 2. ACCUMULATION — Stoch: K < 35 ATAU golden cross valid (K < ACCUM_STOCH_CROSS_K_MAX, default 70)
         stoch_k = float(latest.get('stoch_k', 50.0))
@@ -353,7 +373,7 @@ def filter_all_current_signals(results: Dict[str, ScanResult], state_manager=Non
         if result.avg_turnover_5d < MIN_DAILY_TURNOVER:
             continue
 
-        if result.is_bullish and result.score >= BUY_THRESHOLD and result.is_trending:
+        if result.is_strong_buy:
             if not _is_done(ticker, 'strong_buy'):
                 categories['strong_buy'].append(result)
         elif result.is_accumulation:
