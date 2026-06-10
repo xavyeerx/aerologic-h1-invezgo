@@ -23,7 +23,7 @@ warnings.filterwarnings(
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 75
+BATCH_SIZE = 100
 BATCH_DELAY = 0.35
 MAX_RETRIES = 3
 

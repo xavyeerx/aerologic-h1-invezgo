@@ -4,6 +4,8 @@
 
 import pandas as pd
 import numpy as np
+import time
+from concurrent.futures import ProcessPoolExecutor
 from typing import Dict, List, Tuple
 import logging
 
@@ -105,9 +107,9 @@ def analyze_stock(
             df = calculate_supertrend(df)
         df = calculate_all_indicators(df)
         if STRONG_BUY_SUPERTREND_ENABLED and not USE_SUPERTREND:
-            st_df = calculate_supertrend(df)
-            st_flip = bool(st_df["bullish_break"].iloc[-1])
-            st_raw = st_df["supertrend"].iloc[-1]
+            df = calculate_supertrend(df)
+            st_flip = bool(df["bullish_break"].iloc[-1])
+            st_raw = df["supertrend"].iloc[-1]
             st_line_value = float(st_raw) if pd.notna(st_raw) else 0.0
         if not USE_SUPERTREND:
             # Proxy trend dari EMA (ganti direction supertrend untuk scoring/akumulasi)
@@ -364,6 +366,15 @@ def analyze_stock(
     return result
 
 
+def _analyze_stock_job(args: tuple) -> tuple:
+    """Worker untuk ProcessPoolExecutor (tanpa state_manager — ARB gate di pass terpisah)."""
+    ticker, df, prev_state, market_regime = args
+    result = analyze_stock(
+        ticker, df, prev_state, state_manager=None, market_regime=market_regime
+    )
+    return ticker, result
+
+
 def scan_all_stocks(
     stock_data: Dict[str, pd.DataFrame],
     previous_states: dict = None,
@@ -371,16 +382,36 @@ def scan_all_stocks(
     market_regime: str = "UNKNOWN",
 ) -> Dict[str, ScanResult]:
     """Scan all stocks and return results"""
-    results = {}
+    results: Dict[str, ScanResult] = {}
     previous_states = previous_states or {}
-    
-    for ticker, df in stock_data.items():
-        prev_state = previous_states.get(ticker, {})
-        result = analyze_stock(
-            ticker, df, prev_state, state_manager=state_manager, market_regime=market_regime
-        )
-        results[ticker] = result
-    
+    items = [
+        (ticker, df, previous_states.get(ticker, {}), market_regime)
+        for ticker, df in stock_data.items()
+    ]
+    workers = int(SCAN_ANALYZE_WORKERS)
+    analyze_t0 = time.perf_counter()
+
+    if workers > 1 and len(items) >= workers * 2:
+        logger.info(f"Parallel analyze: {len(items)} stocks, {workers} workers")
+        with ProcessPoolExecutor(max_workers=workers) as pool:
+            for ticker, result in pool.map(_analyze_stock_job, items, chunksize=24):
+                results[ticker] = result
+    else:
+        for ticker, df, prev_state, regime in items:
+            results[ticker] = analyze_stock(
+                ticker, df, prev_state, state_manager=None, market_regime=regime
+            )
+
+    if state_manager is not None:
+        for ticker, result in results.items():
+            df = stock_data.get(ticker)
+            if df is not None:
+                apply_post_alert_arb_gate(result, df, state_manager)
+
+    logger.info(
+        f"Analyze duration: {time.perf_counter() - analyze_t0:.1f}s "
+        f"({len(results)} stocks, workers={workers if workers > 1 else 1})"
+    )
     return results
 
 

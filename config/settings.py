@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260610-regime-adaptive"
+SCANNER_BUILD_ID = "20260610-scan-parallel"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
@@ -105,6 +105,8 @@ HOLD_THRESHOLD = 40
 
 # === SCANNER SETTINGS ===
 SCAN_INTERVAL_MINUTES = 0  # 0 = back-to-back saat sesi buka (scheduler tidak idle antar scan)
+# Parallel analyze workers (1 = sequential). VM 2 vCPU: 2–4 umumnya optimal.
+SCAN_ANALYZE_WORKERS = max(1, int(os.getenv("SCAN_ANALYZE_WORKERS", "4")))
 DATA_PERIOD = "90d"   # Target lebar seri (~90 sesi IDX); Yahoo: tambah buffer kalender di data_fetcher
 DATA_INTERVAL = "1d"  # DAILY candlestick for ALL signals
 

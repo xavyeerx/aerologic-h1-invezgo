@@ -186,8 +186,11 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     
     # Fetch data
     logger.info("Fetching data from Yahoo Finance...")
+    fetch_t0 = time.perf_counter()
     stock_data = fetch_multiple_stocks(stocks, period=DATA_PERIOD, interval=DATA_INTERVAL)
-    logger.info(f"Fetched data for {len(stock_data)} stocks")
+    logger.info(
+        f"Fetched data for {len(stock_data)} stocks in {time.perf_counter() - fetch_t0:.1f}s"
+    )
     
     if len(stock_data) == 0:
         logger.error("No data fetched. Aborting scan.")
