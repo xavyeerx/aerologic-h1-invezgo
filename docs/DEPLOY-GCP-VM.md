@@ -176,6 +176,24 @@ ls -la ~/bot-teknikal-v2/venv/bin/python
 
 Harus ada file executable.
 
+### Timezone VM (WIB)
+
+Scheduler memakai `pytz` (`Asia/Jakarta`), jadi **jam trading tetap benar** meski timezone OS VM UTC. Tetap disarankan set timezone VM ke WIB agar log `journalctl` mudah dibaca:
+
+```bash
+# Cek timezone saat ini
+timedatectl
+
+# Set ke WIB (sekali saja)
+sudo timedatectl set-timezone Asia/Jakarta
+
+# Verifikasi — Local time harus WIB (+07)
+date
+timedatectl | grep 'Time zone'
+```
+
+Contoh benar: `Time zone: Asia/Jakarta (WIB, +0700)` dan `date` menunjukkan jam lokal yang sama dengan jam Anda.
+
 ---
 
 ## Bagian E — Buat file env (channel sama dengan v1)

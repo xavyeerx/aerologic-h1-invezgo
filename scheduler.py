@@ -191,7 +191,8 @@ def next_event_sleep(now: datetime, state: dict, sm: StateManager) -> tuple[date
                 f"Chart patterns TF-D ({CHART_PATTERN_ALERT_HOUR:02d}:"
                 f"{CHART_PATTERN_ALERT_MINUTE:02d})"
             )
-        if need_chart and now < chart_at:
+        # Slot malam (≥16:00, mis. 16:45) tidak boleh menahan scan intraday
+        if need_chart and not chart_evening and now < chart_at:
             return chart_at, "Chart patterns TF-D (sebelum scan lanjut)"
         return now, "Scan (back-to-back)"
 
