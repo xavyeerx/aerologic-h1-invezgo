@@ -59,6 +59,7 @@ class _AlertView:
         self.pattern_name = sig.get("pattern_name", "") or ""
         self.is_bullish_engulfing = bool(sig.get("is_bullish_engulfing", False))
         self.is_price_breakout = bool(sig.get("is_price_breakout", False))
+        self.is_supertrend_flip = bool(sig.get("is_supertrend_flip", False))
 
 
 def _paths(data_dir: str) -> tuple[str, str]:
@@ -136,6 +137,7 @@ def _result_to_sig(result, signal_type: str) -> dict:
         "pattern_name": getattr(result, "pattern_name", "") or "",
         "is_bullish_engulfing": bool(getattr(result, "is_bullish_engulfing", False)),
         "is_price_breakout": bool(getattr(result, "is_price_breakout", False)),
+        "is_supertrend_flip": bool(getattr(result, "is_supertrend_flip", False)),
     }
 
 

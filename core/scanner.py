@@ -8,7 +8,7 @@ from typing import Dict, List, Tuple
 import logging
 
 from config.settings import *
-from .supertrend import calculate_supertrend  # just_turned_bullish: dipakai jika USE_SUPERTREND=True
+from .supertrend import calculate_supertrend, just_turned_bullish  # just_turned_bullish: USE_SUPERTREND=True
 from .indicators import calculate_all_indicators, calculate_candlestick_patterns
 from .scoring import calculate_total_score
 from .data_fetcher import compute_session_change_percent
@@ -63,6 +63,7 @@ class ScanResult:
         self.resistance = 0.0
         self.is_bullish_engulfing = False
         self.is_price_breakout = False
+        self.is_supertrend_flip = False
 
         # Learning features (Phase 1 — dicatat ke DB)
         self.bars_since_breakout = 0       # candle sejak supertrend flip bullish
@@ -194,7 +195,15 @@ def analyze_stock(
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
 
-        # ── STRONG BUY v6: engulf (1×/hari pola) ATAU breakout fresh + volume ──
+        # Supertrend indikator untuk jalur strong buy (terpisah dari USE_SUPERTREND / EMA proxy)
+        if STRONG_BUY_SUPERTREND_ENABLED or USE_SUPERTREND:
+            st_latest = calculate_supertrend(df.copy()).iloc[-1]
+            result.is_supertrend_flip = bool(st_latest.get('bullish_break', False))
+            if not USE_SUPERTREND:
+                st_val = st_latest.get('supertrend', 0.0)
+                result.supertrend_value = float(st_val) if pd.notna(st_val) else 0.0
+
+        # ── STRONG BUY: engulf | breakout fresh | supertrend flip ──
         if (
             result.is_bullish_engulfing
             and engulf_volume_ok
@@ -208,6 +217,13 @@ def analyze_stock(
             and result.score >= BUY_THRESHOLD
             and is_bullish_trend
             and result.is_trending
+        ):
+            result.is_strong_buy = True
+        elif (
+            STRONG_BUY_SUPERTREND_ENABLED
+            and result.is_supertrend_flip
+            and has_volume_signal
+            and result.score >= BUY_THRESHOLD
         ):
             result.is_strong_buy = True
 

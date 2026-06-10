@@ -128,7 +128,9 @@ def format_strong_buy_message(
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
-            "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+            "ST▲" if getattr(r, "is_supertrend_flip", False) else (
+                "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+            )
         )
         lines.append(
             f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | {getattr(r, 'pattern_name', None) or '-'}"
@@ -140,8 +142,9 @@ def format_strong_buy_message(
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(
-        f"💡 <i>Engulfing + vol ≥{ENGULF_MIN_VOLUME_RATIO}× MA20 + score ≥{STRONG_BUY_ENGULF_MIN_SCORE} "
-        f"ATAU breakout fresh + vol spike + score ≥{BUY_THRESHOLD} + ADX trending</i>"
+        f"💡 <i>Engulf + vol ≥{ENGULF_MIN_VOLUME_RATIO}× + score ≥{STRONG_BUY_ENGULF_MIN_SCORE} | "
+        f"breakout fresh + vol + score ≥{BUY_THRESHOLD} + ADX | "
+        f"supertrend flip + vol + score ≥{BUY_THRESHOLD}</i>"
     )
     total = total_count if total_count is not None else len(results)
     if total_count and len(results) < total_count:
