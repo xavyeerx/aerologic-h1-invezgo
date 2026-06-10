@@ -130,7 +130,7 @@ def format_strong_buy_message(
             "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
         )
         lines.append(
-            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | {r.pattern_name or '-'}"
+            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | {getattr(r, 'pattern_name', None) or '-'}"
         )
         tp_info = _format_tp_info(r)
         if tp_info:

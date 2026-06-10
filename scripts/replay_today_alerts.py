@@ -56,6 +56,9 @@ class _AlertView:
         self.correction_percent = float(sig.get("correction_percent", 0) or 0)
         self.early_entry_strength = int(sig.get("early_entry_strength", 0) or 0)
         self.alert_time = sig.get("alert_time", "")
+        self.pattern_name = sig.get("pattern_name", "") or ""
+        self.is_bullish_engulfing = bool(sig.get("is_bullish_engulfing", False))
+        self.is_price_breakout = bool(sig.get("is_price_breakout", False))
 
 
 def _paths(data_dir: str) -> tuple[str, str]:
@@ -130,6 +133,9 @@ def _result_to_sig(result, signal_type: str) -> dict:
         "early_entry_strength": getattr(result, "early_entry_strength", 0),
         "score": getattr(result, "score", 0),
         "alert_time": "",
+        "pattern_name": getattr(result, "pattern_name", "") or "",
+        "is_bullish_engulfing": bool(getattr(result, "is_bullish_engulfing", False)),
+        "is_price_breakout": bool(getattr(result, "is_price_breakout", False)),
     }
 
 
@@ -270,7 +276,7 @@ def main() -> None:
         _print_help_missing(args.date, tracker_path, daily_path, tracker)
         return
 
-    messages = _build_messages(grouped)
+    messages = _build_messages(grouped) if not args.telegram else []
     banner = (
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"📋 RIWAYAT ALERT — {args.date}\n"
