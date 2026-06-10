@@ -128,12 +128,17 @@ def format_strong_buy_message(
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
-            "ST▲" if getattr(r, "is_supertrend_flip", False) else (
-                "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+            "BULL-DIV▲" if getattr(r, "is_bull_div", False) else (
+                "ST▲" if getattr(r, "is_supertrend_flip", False) else (
+                    "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+                )
             )
         )
+        regime_tag = getattr(r, "market_regime", "") or ""
+        regime_suffix = f" | Mkt:{regime_tag}" if regime_tag and regime_tag != "UNKNOWN" else ""
         lines.append(
-            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | {getattr(r, 'pattern_name', None) or '-'}"
+            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | "
+            f"{getattr(r, 'pattern_name', None) or '-'}{regime_suffix}"
         )
         tp_info = _format_tp_info(r)
         if tp_info:
@@ -142,9 +147,9 @@ def format_strong_buy_message(
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(
-        f"💡 <i>Engulf + vol ≥{ENGULF_MIN_VOLUME_RATIO}× + score ≥{STRONG_BUY_ENGULF_MIN_SCORE} | "
-        f"breakout fresh + vol + score ≥{BUY_THRESHOLD} + ADX | "
-        f"supertrend flip + vol + score ≥{BUY_THRESHOLD}</i>"
+        f"💡 <i>Threshold adaptif per regime IHSG (BULL/BEAR/SIDEWAYS). "
+        f"BEAR: reversal dini (ST/engulf/div, score lebih rendah). "
+        f"BULL: breakout + ADX + score ≥{BUY_THRESHOLD}</i>"
     )
     total = total_count if total_count is not None else len(results)
     if total_count and len(results) < total_count:

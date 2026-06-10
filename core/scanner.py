@@ -13,6 +13,7 @@ from .indicators import calculate_all_indicators, calculate_candlestick_patterns
 from .scoring import calculate_total_score
 from .data_fetcher import compute_session_change_percent
 from .arb_filter import apply_post_alert_arb_gate
+from .signal_rules import has_early_reversal_bias, strong_buy_regime_profile
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class ScanResult:
         self.is_bullish_engulfing = False
         self.is_price_breakout = False
         self.is_supertrend_flip = False
+        self.market_regime = "UNKNOWN"
 
         # Learning features (Phase 1 — dicatat ke DB)
         self.bars_since_breakout = 0       # candle sejak supertrend flip bullish
@@ -76,12 +78,15 @@ def analyze_stock(
     df: pd.DataFrame,
     previous_state: dict = None,
     state_manager=None,
+    market_regime: str = "UNKNOWN",
 ) -> ScanResult:
     """
     Analyze a single stock and detect signals (v5 logic)
     """
     result = ScanResult(ticker)
-    
+    result.market_regime = (market_regime or "UNKNOWN").upper()
+    sb = strong_buy_regime_profile(market_regime)
+
     if df is None or len(df) < 50:
         return result
     
@@ -202,30 +207,56 @@ def analyze_stock(
             latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
+        has_bull_div = bool(latest.get("bullish_divergence", False))
+        trend_engulf = has_early_reversal_bias(
+            latest,
+            is_bullish_trend=is_bullish_trend,
+            is_st_flip=result.is_supertrend_flip,
+            require_full_trend=sb["require_bullish_trend_engulf"],
+        )
+        trend_breakout = has_early_reversal_bias(
+            latest,
+            is_bullish_trend=is_bullish_trend,
+            is_st_flip=result.is_supertrend_flip,
+            require_full_trend=sb["require_bullish_trend_breakout"],
+        )
+        adx_ok = result.is_trending if sb["require_adx_breakout"] else True
 
-        # ── STRONG BUY: engulf | breakout fresh | supertrend flip ──
+        # ── STRONG BUY (regime-adaptive): engulf | breakout | ST flip | bull div ──
         if (
             result.is_bullish_engulfing
             and engulf_volume_ok
-            and is_bullish_trend
-            and result.score >= STRONG_BUY_ENGULF_MIN_SCORE
+            and trend_engulf
+            and result.score >= sb["engulf_min_score"]
         ):
             result.is_strong_buy = True
         elif (
             has_volume_signal
             and result.is_price_breakout
-            and result.score >= BUY_THRESHOLD
-            and is_bullish_trend
-            and result.is_trending
+            and result.score >= sb["breakout_min_score"]
+            and trend_breakout
+            and adx_ok
         ):
             result.is_strong_buy = True
         elif (
             STRONG_BUY_SUPERTREND_ENABLED
             and result.is_supertrend_flip
             and has_volume_signal
-            and result.score >= BUY_THRESHOLD
+            and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
+        elif (
+            has_bull_div
+            and has_volume_signal
+            and (
+                result.is_supertrend_flip
+                or result.is_bullish_engulfing
+                or result.is_price_breakout
+            )
+            and result.score >= sb["div_min_score"]
+        ):
+            result.is_strong_buy = True
+            result.is_bull_div = True
 
         # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
         # if USE_SUPERTREND:
@@ -337,6 +368,7 @@ def scan_all_stocks(
     stock_data: Dict[str, pd.DataFrame],
     previous_states: dict = None,
     state_manager=None,
+    market_regime: str = "UNKNOWN",
 ) -> Dict[str, ScanResult]:
     """Scan all stocks and return results"""
     results = {}
@@ -344,7 +376,9 @@ def scan_all_stocks(
     
     for ticker, df in stock_data.items():
         prev_state = previous_states.get(ticker, {})
-        result = analyze_stock(ticker, df, prev_state, state_manager=state_manager)
+        result = analyze_stock(
+            ticker, df, prev_state, state_manager=state_manager, market_regime=market_regime
+        )
         results[ticker] = result
     
     return results

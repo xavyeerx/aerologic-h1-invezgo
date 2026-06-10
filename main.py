@@ -199,17 +199,25 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # Reset daily alerts if new day
     state_manager.reset_daily_if_new_day()
 
-    # Scan all stocks
-    logger.info("Analyzing stocks...")
-    results = scan_all_stocks(stock_data, previous_states, state_manager=state_manager)
-
-    # ── Ambil kondisi pasar IHSG (untuk learning tracking) ───────────
+    # Regime IHSG — dipakai threshold strong buy adaptif (BEAR/SIDEWAYS lebih dini)
     regime_info = {'regime': 'UNKNOWN', 'adx': 0.0, 'momentum_5d': 0.0}
     if _LEARNING_IMPORTS_OK:
         try:
             regime_info = get_market_regime()
         except Exception as e:
             logger.warning(f"[Learning] Gagal ambil market regime: {e}")
+    market_regime = regime_info.get('regime', 'UNKNOWN')
+    logger.info(
+        f"Market regime: {market_regime} | "
+        f"ADX={regime_info.get('adx', 0)} | "
+        f"Mom5d={regime_info.get('momentum_5d', 0):+.1f}%"
+    )
+
+    # Scan all stocks
+    logger.info("Analyzing stocks...")
+    results = scan_all_stocks(
+        stock_data, previous_states, state_manager=state_manager, market_regime=market_regime
+    )
 
     # Filter signals
     all_signals = filter_signals(results)
