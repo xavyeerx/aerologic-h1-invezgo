@@ -236,12 +236,16 @@ def _pivot_low_vectorized(low: pd.Series, lookback: int) -> pd.Series:
 
 
 def calculate_price_breakout(df: pd.DataFrame, lookback: int = BREAKOUT_LOOKBACK) -> pd.DataFrame:
-    """Breakout harga: close > highest high N bar sebelumnya (tanpa supertrend)."""
+    """Breakout harga FRESH: close hari ini > high N bar sebelumnya, bar kemarin belum."""
     if len(df) < 2:
         df['price_breakout'] = False
         return df
     prior_high = df['high'].shift(1).rolling(window=lookback, min_periods=max(5, lookback // 2)).max()
-    df['price_breakout'] = df['close'] > prior_high
+    broke_today = df['close'] > prior_high
+    prev_close = df['close'].shift(1)
+    prev_resistance = prior_high.shift(1)
+    was_below = prev_close <= prev_resistance
+    df['price_breakout'] = broke_today & was_below.fillna(False)
     return df
 
 

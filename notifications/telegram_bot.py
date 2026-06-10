@@ -15,6 +15,7 @@ from config.settings import (
     TELEGRAM_CHAT_ID,
     BUY_THRESHOLD,
     ENGULF_MIN_VOLUME_RATIO,
+    STRONG_BUY_ENGULF_MIN_SCORE,
     CHART_PATTERN_ALERT_HOUR,
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_FORCE_SCHEDULED_ONLY,
@@ -139,7 +140,8 @@ def format_strong_buy_message(
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(
-        f"💡 <i>Engulfing + vol ≥{ENGULF_MIN_VOLUME_RATIO}× MA20 ATAU spike/anomali + breakout (score ≥ {BUY_THRESHOLD})</i>"
+        f"💡 <i>Engulfing + vol ≥{ENGULF_MIN_VOLUME_RATIO}× MA20 + score ≥{STRONG_BUY_ENGULF_MIN_SCORE} "
+        f"ATAU breakout fresh + vol spike + score ≥{BUY_THRESHOLD} + ADX trending</i>"
     )
     total = total_count if total_count is not None else len(results)
     if total_count and len(results) < total_count:

@@ -194,13 +194,20 @@ def analyze_stock(
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
 
-        # ── STRONG BUY v6: volume + breakout + bullish engulfing ─────────
-        if result.is_bullish_engulfing and engulf_volume_ok:
+        # ── STRONG BUY v6: engulf (1×/hari pola) ATAU breakout fresh + volume ──
+        if (
+            result.is_bullish_engulfing
+            and engulf_volume_ok
+            and is_bullish_trend
+            and result.score >= STRONG_BUY_ENGULF_MIN_SCORE
+        ):
             result.is_strong_buy = True
         elif (
             has_volume_signal
             and result.is_price_breakout
             and result.score >= BUY_THRESHOLD
+            and is_bullish_trend
+            and result.is_trending
         ):
             result.is_strong_buy = True
 

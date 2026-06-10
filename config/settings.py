@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 # Naikkan saat deploy agar mudah cek VM sudah pull versi terbaru (lihat log/Telegram startup).
-SCANNER_BUILD_ID = "20260610-scan-continuous"
+SCANNER_BUILD_ID = "20260610-strongbuy-tight"
 
 # === TELEGRAM CONFIGURATION ===
 # For Railway: set these as environment variables
@@ -40,7 +40,9 @@ EMA_SLOW = 200
 VOLUME_PERIOD = 20
 VOLUME_SPIKE_THRESHOLD = 1.2   # >= 1.2× MA20
 UNUSUAL_VOLUME_THRESHOLD = 2.0  # >= 2× MA20
-ENGULF_MIN_VOLUME_RATIO = 1.0  # bullish engulfing: volume minimal > MA20 (1×)
+ENGULF_MIN_VOLUME_RATIO = 1.0  # bullish engulfing: volume minimal ≥ MA20 (1×)
+# Jalur engulfing: score minimum (lebih longgar dari breakout karena pola candle konfirmasi)
+STRONG_BUY_ENGULF_MIN_SCORE = 40
 MIN_VOLUME = 100000
 
 # === STOCHASTIC RSI SETTINGS ===
