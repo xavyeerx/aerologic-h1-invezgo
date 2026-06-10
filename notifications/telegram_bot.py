@@ -128,9 +128,11 @@ def format_strong_buy_message(
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
-            "BULL-DIV▲" if getattr(r, "is_bull_div", False) else (
-                "ST▲" if getattr(r, "is_supertrend_flip", False) else (
-                    "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+            "RS-BEAR▲" if getattr(r, "is_counter_trend", False) else (
+                "BULL-DIV▲" if getattr(r, "is_bull_div", False) else (
+                    "ST▲" if getattr(r, "is_supertrend_flip", False) else (
+                        "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
+                    )
                 )
             )
         )
@@ -147,9 +149,8 @@ def format_strong_buy_message(
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append(
-        f"💡 <i>Threshold adaptif per regime IHSG (BULL/BEAR/SIDEWAYS). "
-        f"BEAR: reversal dini (ST/engulf/div, score lebih rendah). "
-        f"BULL: breakout + ADX + score ≥{BUY_THRESHOLD}</i>"
+        f"💡 <i>Threshold adaptif per regime IHSG. BEAR: counter-trend (hijau + vol + trigger) "
+        f"selain ST/engulf/breakout fresh. BULL: breakout + ADX + score ≥{BUY_THRESHOLD}</i>"
     )
     total = total_count if total_count is not None else len(results)
     if total_count and len(results) < total_count:

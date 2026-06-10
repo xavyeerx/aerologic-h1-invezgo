@@ -219,7 +219,11 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     # Scan all stocks
     logger.info("Analyzing stocks...")
     results = scan_all_stocks(
-        stock_data, previous_states, state_manager=state_manager, market_regime=market_regime
+        stock_data,
+        previous_states,
+        state_manager=state_manager,
+        market_regime=market_regime,
+        market_momentum_5d=float(regime_info.get("momentum_5d", 0) or 0),
     )
 
     # Filter signals

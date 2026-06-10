@@ -15,7 +15,12 @@ from .indicators import calculate_all_indicators, calculate_candlestick_patterns
 from .scoring import calculate_total_score
 from .data_fetcher import compute_session_change_percent
 from .arb_filter import apply_post_alert_arb_gate
-from .signal_rules import has_early_reversal_bias, strong_buy_regime_profile
+from .signal_rules import (
+    counter_trend_strong_buy,
+    has_early_reversal_bias,
+    has_reversal_candle,
+    strong_buy_regime_profile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +72,7 @@ class ScanResult:
         self.is_bullish_engulfing = False
         self.is_price_breakout = False
         self.is_supertrend_flip = False
+        self.is_counter_trend = False
         self.market_regime = "UNKNOWN"
 
         # Learning features (Phase 1 — dicatat ke DB)
@@ -81,6 +87,7 @@ def analyze_stock(
     previous_state: dict = None,
     state_manager=None,
     market_regime: str = "UNKNOWN",
+    market_momentum_5d: float = 0.0,
 ) -> ScanResult:
     """
     Analyze a single stock and detect signals (v5 logic)
@@ -204,11 +211,13 @@ def analyze_stock(
         is_bullish_trend = latest['direction'] == 1
         result.is_bullish_engulfing = bool(latest.get('bullish_engulfing', False))
         result.is_price_breakout = bool(latest.get('price_breakout', False))
+        reversal_candle = has_reversal_candle(latest)
         vol_ratio = float(latest.get('volume_ratio', 0.0) or 0.0)
         has_volume_signal = bool(
             latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
+        st_volume_ok = has_volume_signal if sb.get("st_use_spike_volume", True) else engulf_volume_ok
         has_bull_div = bool(latest.get("bullish_divergence", False))
         trend_engulf = has_early_reversal_bias(
             latest,
@@ -224,9 +233,9 @@ def analyze_stock(
         )
         adx_ok = result.is_trending if sb["require_adx_breakout"] else True
 
-        # ── STRONG BUY (regime-adaptive): engulf | breakout | ST flip | bull div ──
+        # ── STRONG BUY (regime-adaptive): engulf | breakout | ST | div | counter-trend ──
         if (
-            result.is_bullish_engulfing
+            reversal_candle
             and engulf_volume_ok
             and trend_engulf
             and result.score >= sb["engulf_min_score"]
@@ -243,7 +252,7 @@ def analyze_stock(
         elif (
             STRONG_BUY_SUPERTREND_ENABLED
             and result.is_supertrend_flip
-            and has_volume_signal
+            and st_volume_ok
             and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
@@ -252,13 +261,25 @@ def analyze_stock(
             and has_volume_signal
             and (
                 result.is_supertrend_flip
-                or result.is_bullish_engulfing
+                or reversal_candle
                 or result.is_price_breakout
             )
             and result.score >= sb["div_min_score"]
         ):
             result.is_strong_buy = True
             result.is_bull_div = True
+        elif counter_trend_strong_buy(
+            change_percent=result.change_percent,
+            score=result.score,
+            vol_ratio=vol_ratio,
+            latest=latest,
+            is_st_flip=result.is_supertrend_flip,
+            is_price_breakout=result.is_price_breakout,
+            profile=sb,
+            market_momentum_5d=market_momentum_5d,
+        ):
+            result.is_strong_buy = True
+            result.is_counter_trend = True
 
         # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
         # if USE_SUPERTREND:
@@ -368,11 +389,37 @@ def analyze_stock(
 
 def _analyze_stock_job(args: tuple) -> tuple:
     """Worker untuk ProcessPoolExecutor (tanpa state_manager — ARB gate di pass terpisah)."""
-    ticker, df, prev_state, market_regime = args
+    ticker, df, prev_state, market_regime, market_momentum_5d = args
     result = analyze_stock(
-        ticker, df, prev_state, state_manager=None, market_regime=market_regime
+        ticker,
+        df,
+        prev_state,
+        state_manager=None,
+        market_regime=market_regime,
+        market_momentum_5d=market_momentum_5d,
     )
     return ticker, result
+
+
+def log_strong_buy_diagnostics(results: Dict[str, ScanResult], market_regime: str) -> None:
+    """Ringkasan kandidat per scan — bantu debug kenapa 0 alert."""
+    n = len(results)
+    if n == 0:
+        return
+    st_flip = sum(1 for r in results.values() if r.is_supertrend_flip)
+    engulf = sum(1 for r in results.values() if r.is_bullish_engulfing)
+    breakout = sum(1 for r in results.values() if r.is_price_breakout)
+    strong = sum(1 for r in results.values() if r.is_strong_buy)
+    counter = sum(1 for r in results.values() if getattr(r, "is_counter_trend", False))
+    green_vol = sum(
+        1 for r in results.values()
+        if r.change_percent >= 1.2 and r.volume_ratio >= 1.15
+    )
+    logger.info(
+        f"Signal diagnostics ({market_regime}): "
+        f"ST_flip={st_flip} engulf={engulf} breakout_fresh={breakout} "
+        f"green+vol={green_vol} strong_buy={strong} (counter_trend={counter})"
+    )
 
 
 def scan_all_stocks(
@@ -380,12 +427,13 @@ def scan_all_stocks(
     previous_states: dict = None,
     state_manager=None,
     market_regime: str = "UNKNOWN",
+    market_momentum_5d: float = 0.0,
 ) -> Dict[str, ScanResult]:
     """Scan all stocks and return results"""
     results: Dict[str, ScanResult] = {}
     previous_states = previous_states or {}
     items = [
-        (ticker, df, previous_states.get(ticker, {}), market_regime)
+        (ticker, df, previous_states.get(ticker, {}), market_regime, market_momentum_5d)
         for ticker, df in stock_data.items()
     ]
     workers = int(SCAN_ANALYZE_WORKERS)
@@ -397,9 +445,14 @@ def scan_all_stocks(
             for ticker, result in pool.map(_analyze_stock_job, items, chunksize=24):
                 results[ticker] = result
     else:
-        for ticker, df, prev_state, regime in items:
+        for ticker, df, prev_state, regime, mom5d in items:
             results[ticker] = analyze_stock(
-                ticker, df, prev_state, state_manager=None, market_regime=regime
+                ticker,
+                df,
+                prev_state,
+                state_manager=None,
+                market_regime=regime,
+                market_momentum_5d=mom5d,
             )
 
     if state_manager is not None:
@@ -407,6 +460,8 @@ def scan_all_stocks(
             df = stock_data.get(ticker)
             if df is not None:
                 apply_post_alert_arb_gate(result, df, state_manager)
+
+    log_strong_buy_diagnostics(results, market_regime)
 
     logger.info(
         f"Analyze duration: {time.perf_counter() - analyze_t0:.1f}s "
