@@ -32,6 +32,7 @@ from notifications.telegram_bot import (
     format_accumulation_message,
     format_early_entry_message,
     format_strong_buy_message,
+    send_chunked_alert,
     send_telegram_message,
 )
 
@@ -279,9 +280,18 @@ def main() -> None:
 
     if args.telegram:
         send_telegram_message(banner)
-        for msg in messages:
-            send_telegram_message(msg)
-        print(f"Terkirim {len(messages)} blok ke Telegram.")
+        sent = 0
+        for key, formatter in (
+            ("strong_buy", format_strong_buy_message),
+            ("accumulation", format_accumulation_message),
+            ("early_entry", format_early_entry_message),
+        ):
+            rows = grouped.get(key) or []
+            if not rows:
+                continue
+            views = [_AlertView(s) for s in rows]
+            sent += send_chunked_alert(views, formatter)
+        print(f"Terkirim {sent} blok ke Telegram.")
     else:
         print(_strip_html(banner))
         for msg in messages:

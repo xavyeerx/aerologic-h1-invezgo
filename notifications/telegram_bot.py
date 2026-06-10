@@ -97,14 +97,26 @@ def _format_tp_info(r) -> str:
     return "\n".join(lines)
 
 
-def format_strong_buy_message(results: List) -> str:
+TELEGRAM_MAX_CHARS = 3800  # Telegram hard limit 4096; leave buffer for HTML entities
+
+
+def format_strong_buy_message(
+    results: List,
+    *,
+    total_count: int | None = None,
+    part: int = 1,
+) -> str:
     """Format Strong Buy (confirmed breakout) alert message"""
     if not results:
         return ""
-    
+
+    title = "🚀 <b>STRONG BUY SIGNAL</b>"
+    if part > 1:
+        title += f" <i>(bagian {part})</i>"
+
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🚀 <b>STRONG BUY SIGNAL</b>",
+        title,
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"⏰ {get_current_time_wib()}",
         ""
@@ -129,19 +141,32 @@ def format_strong_buy_message(results: List) -> str:
     lines.append(
         f"💡 <i>Engulfing + vol ≥{ENGULF_MIN_VOLUME_RATIO}× MA20 ATAU spike/anomali + breakout (score ≥ {BUY_THRESHOLD})</i>"
     )
-    lines.append(f"Total: {len(results)} saham strong buy")
+    total = total_count if total_count is not None else len(results)
+    if total_count and len(results) < total_count:
+        lines.append(f"Tampil: {len(results)} dari {total} saham strong buy")
+    else:
+        lines.append(f"Total: {total} saham strong buy")
     
     return "\n".join(lines)
 
 
-def format_accumulation_message(results: List) -> str:
+def format_accumulation_message(
+    results: List,
+    *,
+    total_count: int | None = None,
+    part: int = 1,
+) -> str:
     """Format accumulation signal message"""
     if not results:
         return ""
-    
+
+    title = "🔵 <b>ACCUMULATION SIGNAL</b>"
+    if part > 1:
+        title += f" <i>(bagian {part})</i>"
+
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🔵 <b>ACCUMULATION SIGNAL</b>",
+        title,
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"⏰ {get_current_time_wib()}",
         ""
@@ -158,19 +183,32 @@ def format_accumulation_message(results: List) -> str:
         lines.append("")
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"Total: {len(results)} saham accumulation")
+    total = total_count if total_count is not None else len(results)
+    if total_count and len(results) < total_count:
+        lines.append(f"Tampil: {len(results)} dari {total} saham accumulation")
+    else:
+        lines.append(f"Total: {total} saham accumulation")
     
     return "\n".join(lines)
 
 
-def format_early_entry_message(results: List) -> str:
+def format_early_entry_message(
+    results: List,
+    *,
+    total_count: int | None = None,
+    part: int = 1,
+) -> str:
     """Format Early Entry (Serok Bawah) message"""
     if not results:
         return ""
-    
+
+    title = "🎯 <b>EARLY ENTRY (SEROK BAWAH)</b>"
+    if part > 1:
+        title += f" <i>(bagian {part})</i>"
+
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🎯 <b>EARLY ENTRY (SEROK BAWAH)</b>",
+        title,
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"⏰ {get_current_time_wib()}",
         ""
@@ -196,7 +234,11 @@ def format_early_entry_message(results: List) -> str:
     
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     lines.append("⚠️ <i>Sinyal dini - DYOR!</i>")
-    lines.append(f"Total: {len(results)} saham early entry")
+    total = total_count if total_count is not None else len(results)
+    if total_count and len(results) < total_count:
+        lines.append(f"Tampil: {len(results)} dari {total} saham early entry")
+    else:
+        lines.append(f"Total: {total} saham early entry")
     
     return "\n".join(lines)
 
@@ -296,6 +338,48 @@ def _dedupe_results_by_ticker(results: List) -> List:
     return out
 
 
+def _chunked_alert_messages(results: List, format_fn) -> List[str]:
+    """Split alert into multiple messages under TELEGRAM_MAX_CHARS."""
+    results = _dedupe_results_by_ticker(results)
+    if not results:
+        return []
+
+    total = len(results)
+    messages: List[str] = []
+    idx = 0
+    part = 1
+
+    while idx < len(results):
+        lo = idx
+        hi = lo + 1
+        while hi <= len(results):
+            msg = format_fn(results[lo:hi], total_count=total, part=part)
+            if len(msg) > TELEGRAM_MAX_CHARS:
+                if hi - lo == 1:
+                    break
+                hi -= 1
+                break
+            if hi == len(results):
+                break
+            hi += 1
+
+        msg = format_fn(results[lo:hi], total_count=total, part=part)
+        messages.append(msg)
+        idx = hi
+        part += 1
+
+    return messages
+
+
+def send_chunked_alert(results: List, format_fn) -> int:
+    """Send one alert type, splitting into multiple Telegram messages if needed."""
+    sent = 0
+    for msg in _chunked_alert_messages(results, format_fn):
+        if send_telegram_message(msg):
+            sent += 1
+    return sent
+
+
 def send_all_alerts(signals: dict) -> int:
     """
     Send all alert messages (v5)
@@ -303,23 +387,14 @@ def send_all_alerts(signals: dict) -> int:
     """
     messages_sent = 0
     
-    # Strong Buy (was bullish_break)
     if signals.get('strong_buy'):
-        msg = format_strong_buy_message(_dedupe_results_by_ticker(signals['strong_buy']))
-        if send_telegram_message(msg):
-            messages_sent += 1
+        messages_sent += send_chunked_alert(signals['strong_buy'], format_strong_buy_message)
     
-    # Accumulation
     if signals.get('accumulation'):
-        msg = format_accumulation_message(_dedupe_results_by_ticker(signals['accumulation']))
-        if send_telegram_message(msg):
-            messages_sent += 1
+        messages_sent += send_chunked_alert(signals['accumulation'], format_accumulation_message)
     
-    # Early Entry (Serok Bawah)
     if signals.get('early_entry'):
-        msg = format_early_entry_message(_dedupe_results_by_ticker(signals['early_entry']))
-        if send_telegram_message(msg):
-            messages_sent += 1
+        messages_sent += send_chunked_alert(signals['early_entry'], format_early_entry_message)
     
     return messages_sent
 
