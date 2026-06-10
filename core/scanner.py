@@ -94,9 +94,16 @@ def analyze_stock(
         result.avg_turnover_5d = avg_turnover_5d
         
         # ── Supertrend (opsional — USE_SUPERTREND di settings) ──────────────
+        st_flip = False
+        st_line_value = 0.0
         if USE_SUPERTREND:
             df = calculate_supertrend(df)
         df = calculate_all_indicators(df)
+        if STRONG_BUY_SUPERTREND_ENABLED and not USE_SUPERTREND:
+            st_df = calculate_supertrend(df)
+            st_flip = bool(st_df["bullish_break"].iloc[-1])
+            st_raw = st_df["supertrend"].iloc[-1]
+            st_line_value = float(st_raw) if pd.notna(st_raw) else 0.0
         if not USE_SUPERTREND:
             # Proxy trend dari EMA (ganti direction supertrend untuk scoring/akumulasi)
             df['direction'] = np.where(
@@ -113,7 +120,8 @@ def analyze_stock(
         
         # Basic info
         result.price = latest['close']
-        result.supertrend_value = latest['supertrend']
+        result.supertrend_value = latest['supertrend'] if USE_SUPERTREND else st_line_value
+        result.is_supertrend_flip = st_flip if not USE_SUPERTREND else bool(latest.get('bullish_break', False))
         result.is_bullish = latest['direction'] == 1
         result.volume_ratio = latest.get('volume_ratio', 1.0)
         result.stoch_k = latest.get('stoch_k', 50.0)
@@ -194,14 +202,6 @@ def analyze_stock(
             latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
-
-        # Supertrend indikator untuk jalur strong buy (terpisah dari USE_SUPERTREND / EMA proxy)
-        if STRONG_BUY_SUPERTREND_ENABLED or USE_SUPERTREND:
-            st_latest = calculate_supertrend(df.copy()).iloc[-1]
-            result.is_supertrend_flip = bool(st_latest.get('bullish_break', False))
-            if not USE_SUPERTREND:
-                st_val = st_latest.get('supertrend', 0.0)
-                result.supertrend_value = float(st_val) if pd.notna(st_val) else 0.0
 
         # ── STRONG BUY: engulf | breakout fresh | supertrend flip ──
         if (

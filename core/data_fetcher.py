@@ -23,8 +23,8 @@ warnings.filterwarnings(
 
 logger = logging.getLogger(__name__)
 
-BATCH_SIZE = 50
-BATCH_DELAY = 1.0
+BATCH_SIZE = 75
+BATCH_DELAY = 0.35
 MAX_RETRIES = 3
 
 # DATA_PERIOD (mis. 90d) = target lebar seri; buffer kalender tambah hari non-dagang/libur IDX
@@ -356,25 +356,28 @@ def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> fl
     """
     Close sesi sebelumnya untuk hitung % perubahan hari ini.
 
-    Saat pasar IDX masih buka, Yahoo kadang mengisi bar kemarin dengan close yang
-    mendekati harga live (mis. 134 vs 109) sehingga iloc[-2] salah dan % jadi ~0,7%
-    padahal naik >20%. Perbaikan: quote previousClose dulu, lalu heuristik open vs bar.
+    Pakai OHLC batch dulu (cepat). Quote Yahoo hanya bila heuristik mendeteksi
+    glitch intraday (prev close ~ harga live, open jauh).
     """
     if df is None or len(df) < 1:
         return 0.0
 
     current = float(df["close"].iloc[-1])
-    if ticker and current > 0:
-        quoted = _yahoo_previous_close_quote(ticker)
-        if quoted and quoted > 0:
-            return quoted
 
     if len(df) < 2:
+        if ticker and current > 0:
+            quoted = _yahoo_previous_close_quote(ticker)
+            if quoted and quoted > 0:
+                return quoted
         return 0.0
 
     prior = df.iloc[:-1]
     prev_close = float(prior["close"].iloc[-1])
     if prev_close <= 0:
+        if ticker and current > 0:
+            quoted = _yahoo_previous_close_quote(ticker)
+            if quoted and quoted > 0:
+                return quoted
         return 0.0
 
     today_open = None

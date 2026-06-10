@@ -5,6 +5,7 @@
 import sys
 import os
 import gc
+import time
 import logging
 import logging.handlers
 from datetime import datetime
@@ -177,6 +178,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     logger.info("=" * 50)
     logger.info("Starting IHSG Supertrend Scan")
     logger.info("=" * 50)
+    scan_t0 = time.perf_counter()
     
     # Get stock list
     stocks = get_all_stocks()
@@ -273,6 +275,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     }
     
     logger.info("Scan complete!")
+    logger.info(f"Scan duration: {time.perf_counter() - scan_t0:.1f}s")
     logger.info(f"Summary: {summary}")
     logger.info("=" * 50)
     
