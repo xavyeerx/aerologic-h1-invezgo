@@ -1,171 +1,76 @@
 # Panduan Deployment IHSG Scanner Bot
 
+Platform: **Google Cloud Platform (GCP) — e2-micro VM**
+
 ---
 
-## 🚀 DEPLOY KE RENDER (GRATIS)
+## Setup Awal di GCP VM
 
-Render adalah platform cloud modern yang mendukung **Background Worker** — cocok untuk bot ini karena tidak membutuhkan web server.
+### Step 1: Buat VM Instance
+1. Buka [Google Cloud Console](https://console.cloud.google.com)
+2. Compute Engine → VM Instances → **Create Instance**
+3. Konfigurasi:
+   - **Name:** `ihsg-scanner`
+   - **Region:** `asia-southeast1` (Singapore)
+   - **Machine type:** `e2-micro` (free tier eligible)
+   - **OS:** Ubuntu 22.04 LTS
+   - **Disk:** 20 GB standard persistent disk
+4. Di bagian **Firewall**, centang *Allow HTTP/HTTPS* tidak perlu — bot ini tidak butuh port terbuka
+5. Klik **Create**
 
-### Langkah 1: Pastikan Project Ada di GitHub
-
-**Dari folder project, jalankan di terminal:**
+### Step 2: Koneksi ke VM
 ```bash
-cd "d:\ALGO TRADE\ihsg-supertrend-scanner"
+# Via Google Cloud Shell atau terminal lokal (gcloud sudah terinstall):
+gcloud compute ssh ihsg-scanner --zone=asia-southeast1-b
 
-# Jika belum di-init:
-git init
-git add .
-git commit -m "Migrate to Render"
-
-# Jika repo sudah ada, cukup push:
-git add .
-git commit -m "Add render.yaml for Render deployment"
-git push origin main
-```
-
-> ⚠️ **PENTING:** Pastikan `.gitignore` sudah mengecualikan file yang berisi token/secret!
-
-### Langkah 2: Buat Akun Render
-1. Buka https://render.com
-2. Klik **Get Started for Free**
-3. Sign up menggunakan akun **GitHub** (lebih mudah)
-
-### Langkah 3: Buat Background Worker Baru
-1. Di Render dashboard, klik **+ New** → **Background Worker**
-2. Pilih **Connect a repository** → pilih repo `ihsg-scanner`
-3. Klik **Connect**
-
-### Langkah 4: Konfigurasi Service
-Isi form dengan pengaturan berikut:
-
-| Field | Value |
-|-------|-------|
-| **Name** | `ihsg-supertrend-scanner` |
-| **Region** | `Singapore (Southeast Asia)` |
-| **Branch** | `main` |
-| **Runtime** | `Python 3` |
-| **Build Command** | `pip install -r requirements.txt` |
-| **Start Command** | `python scheduler.py` |
-| **Instance Type** | `Free` |
-
-> [!TIP]
-> Render akan otomatis mendeteksi `render.yaml` yang sudah ada di repo — konfigurasi bisa langsung ter-import!
-
-### Langkah 5: Set Environment Variables
-Sebelum klik **Create Background Worker**, scroll ke bawah ke bagian **Environment Variables** dan tambahkan:
-
-| Key | Value |
-|-----|-------|
-| `TELEGRAM_BOT_TOKEN` | Token bot Telegram Anda |
-| `TELEGRAM_CHAT_ID` | Chat ID Telegram Anda |
-
-Klik **Add Environment Variable** untuk setiap entri.
-
-### Langkah 6: Deploy
-1. Klik **Create Background Worker**
-2. Render akan mulai build dan deploy otomatis
-3. Waktu build pertama biasanya 2-5 menit
-
-### Langkah 7: Cek Logs
-1. Di dashboard Render, klik service `ihsg-supertrend-scanner`
-2. Klik tab **Logs**
-3. Harusnya ada output: `IHSG SUPERTREND SCANNER v5.0 - SCHEDULER`
-
----
-
-### ✅ Selesai!
-Bot akan berjalan otomatis 24/7 di Render. Cek Telegram untuk menerima alerts.
-
-### ⚠️ Keterbatasan Free Tier Render
-| Hal | Detail |
-|-----|--------|
-| **Sleep** | Free worker **TIDAK sleep** (berbeda dengan Web Service) ✅ |
-| **RAM** | 512 MB — cukup untuk bot ini |
-| **CPU** | Shared, terbatas untuk free tier |
-| **Auto-deploy** | Otomatis setiap kali push ke GitHub |
-
-### Troubleshooting
-| Issue | Solusi |
-|-------|--------|
-| Build gagal | Cek tab **Logs** → bagian **Build** |
-| Bot tidak jalan | Cek **Runtime Logs** di dashboard |
-| Telegram error | Pastikan `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID` sudah di-set di Environment Variables |
-| Crash loop | Render auto-restart, cek error di logs untuk penyebabnya |
-
----
----
-
-| Platform | Harga | Kelebihan |
-|----------|-------|-----------|
-| **Render** | Free tier | Gratis, tidak sleep untuk worker, mudah setup |
-| **DigitalOcean** | $6/bulan | Murah, stabil, tutorial lengkap |
-| **Vultr** | $6/bulan | Banyak lokasi Asia |
-| **Google Cloud** | Free tier 1 tahun | Gratis e2-micro |
-
-> [!TIP]
-> Rekomendasi: **Render Free Tier** untuk percobaan, **DigitalOcean $6/bulan** jika butuh lebih stabil
-
----
-
-## Quick Deploy ke VPS (Ubuntu)
-
-### Step 1: Buat VPS
-1. Daftar di [DigitalOcean](https://digitalocean.com) atau [Vultr](https://vultr.com)
-2. Buat Droplet/Instance:
-   - OS: **Ubuntu 22.04 LTS**
-   - Plan: **$6/bulan (1 vCPU, 1GB RAM)**
-   - Region: **Singapore** (terdekat ke IHSG)
-3. Catat IP address dan password/SSH key
-
-### Step 2: Koneksi ke Server
-```bash
-ssh root@YOUR_SERVER_IP
+# Atau via SSH langsung jika sudah set SSH key:
+ssh username@EXTERNAL_IP
 ```
 
 ### Step 3: Setup Environment
 ```bash
 # Update system
-apt update && apt upgrade -y
+sudo apt update && sudo apt upgrade -y
 
 # Install Python dan tools
-apt install -y python3 python3-pip python3-venv git
+sudo apt install -y python3 python3-pip python3-venv git
 
-# Buat folder project
-mkdir -p /opt/ihsg-scanner
-cd /opt/ihsg-scanner
-```
+# Clone repo
+cd ~
+git clone https://github.com/YOUR_USERNAME/ihsg-supertrend-scanner-v2.git ihsg-scanner
+cd ihsg-scanner
 
-### Step 4: Upload Files
-Dari komputer lokal (PowerShell/CMD):
-```bash
-scp -r "d:\ALGO TRADE\ihsg-supertrend-scanner\*" root@YOUR_SERVER_IP:/opt/ihsg-scanner/
-```
-
-### Step 5: Install Dependencies
-```bash
-cd /opt/ihsg-scanner
+# Buat virtual environment
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Step 6: Test Manual
+### Step 4: Set Environment Variables
 ```bash
-source venv/bin/activate
+# Edit file settings atau buat .env (sesuaikan dengan cara project ini membaca config)
+nano config/settings.py
+# Isi TELEGRAM_BOT_TOKEN dan TELEGRAM_CHAT_ID
+```
+
+### Step 5: Test Manual
+```bash
+source ~/ihsg-scanner/venv/bin/activate
+cd ~/ihsg-scanner
 python scheduler.py
 # Ctrl+C untuk stop jika berhasil
 ```
 
 ---
 
-## Setup Auto-Start dengan Systemd
+## Setup Systemd Service
 
-### Step 7: Buat Service File
+### Buat Service File
 ```bash
-nano /etc/systemd/system/ihsg-scanner.service
+sudo nano /etc/systemd/system/ihsg-scanner.service
 ```
 
-Paste isi berikut:
+Paste isi berikut (sesuaikan username dan path):
 ```ini
 [Unit]
 Description=IHSG Supertrend Scanner Bot
@@ -175,7 +80,6 @@ After=network.target
 Type=simple
 User=anugrahdwikiar
 WorkingDirectory=/home/anugrahdwikiar/ihsg-scanner
-# flock wajib — cegah 2 proses saat start ganda / restart cepat
 ExecStart=/usr/bin/flock -n /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock \
   /home/anugrahdwikiar/ihsg-scanner/venv/bin/python /home/anugrahdwikiar/ihsg-scanner/scheduler.py
 Restart=on-failure
@@ -188,44 +92,39 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 ```
 
-**Penting:** Jangan jalankan `nohup python scheduler.py` bersamaan dengan systemd — itu penyebab 2 proses & alert dobel.
+> **Penting:** Jangan jalankan `nohup python scheduler.py` bersamaan dengan systemd — itu penyebab 2 proses & alert dobel.
 
-### Jika `ps aux | grep scheduler` masih 2 baris
-
+### Aktifkan Service
 ```bash
-sudo systemctl stop ihsg-scanner
-pkill -f "/home/anugrahdwikiar/ihsg-scanner/scheduler.py" || true
-sleep 3
-rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler.lock
-rm -f /home/anugrahdwikiar/ihsg-scanner/database/.scheduler_py.lock
-ps aux | grep scheduler | grep -v grep
-# harus kosong
-
 sudo systemctl daemon-reload
+sudo systemctl enable ihsg-scanner
 sudo systemctl start ihsg-scanner
-sleep 2
-ps aux | grep scheduler | grep -v grep
-# harus 1 baris saja
-
-# Cari service/timer lain yang ikut menjalankan scheduler
-systemctl list-units --all | grep -i ihsg
-crontab -l
-grep -r scheduler /etc/systemd/system/
+sudo systemctl status ihsg-scanner
 ```
 
-### Step 8: Aktifkan Service
+---
+
+## Update Bot (Git Pull + Restart)
+
+Setiap kali ada perubahan kode yang sudah di-push ke GitHub, jalankan ini di VM:
+
 ```bash
-# Reload systemd
-systemctl daemon-reload
+# Masuk ke folder project
+cd ~/ihsg-scanner
 
-# Enable auto-start on boot
-systemctl enable ihsg-scanner
+# Pull perubahan terbaru
+git pull origin main
 
-# Start service
-systemctl start ihsg-scanner
+# Restart bot
+sudo systemctl restart ihsg-scanner
 
-# Cek status
-systemctl status ihsg-scanner
+# Cek status (pastikan active/running)
+sudo systemctl status ihsg-scanner
+```
+
+Untuk lihat log real-time setelah restart:
+```bash
+journalctl -u ihsg-scanner -f
 ```
 
 ---
@@ -234,16 +133,55 @@ systemctl status ihsg-scanner
 
 | Aksi | Command |
 |------|---------|
-| Lihat status | `systemctl status ihsg-scanner-v2` |
-| Lihat log | `journalctl -u ihsg-scanner-v2 -f` |
-| Restart | `systemctl restart ihsg-scanner-v2` |
-| Stop | `systemctl stop ihsg-scanner-v2` |
-| Start | `systemctl start ihsg-scanner-v2` |
+| Cek status | `sudo systemctl status ihsg-scanner` |
+| Lihat log real-time | `journalctl -u ihsg-scanner -f` |
+| Lihat log N baris terakhir | `journalctl -u ihsg-scanner -n 100` |
+| Restart | `sudo systemctl restart ihsg-scanner` |
+| Stop | `sudo systemctl stop ihsg-scanner` |
+| Start | `sudo systemctl start ihsg-scanner` |
+| Cek proses berjalan | `ps aux \| grep scheduler \| grep -v grep` |
 
 ---
 
-## Checklist Sebelum Deploy
+## Troubleshooting
 
-- [ ] Pastikan `config/settings.py` sudah diisi TELEGRAM_BOT_TOKEN dan CHAT_ID
-- [ ] Test dulu di lokal bahwa bot mengirim Telegram
-- [ ] Pastikan `stocks_list.py` sudah berisi saham yang ingin di-scan
+### Bot tidak jalan setelah restart
+```bash
+# Cek apakah ada 2 proses (penyebab alert dobel)
+ps aux | grep scheduler | grep -v grep
+# Harus hanya 1 baris
+
+# Jika ada 2 proses, kill semua dan start ulang bersih:
+sudo systemctl stop ihsg-scanner
+pkill -f "scheduler.py" || true
+sleep 3
+rm -f ~/ihsg-scanner/database/.scheduler.lock
+rm -f ~/ihsg-scanner/database/.scheduler_py.lock
+sudo systemctl start ihsg-scanner
+sleep 2
+ps aux | grep scheduler | grep -v grep
+```
+
+### Git pull konflik
+```bash
+cd ~/ihsg-scanner
+git fetch origin
+git reset --hard origin/main   # WARNING: buang perubahan lokal
+sudo systemctl restart ihsg-scanner
+```
+
+### Cek apakah ada service/timer duplikat
+```bash
+systemctl list-units --all | grep -i ihsg
+crontab -l
+grep -r scheduler /etc/systemd/system/
+```
+
+---
+
+## Checklist Sebelum Deploy Pertama
+
+- [ ] `config/settings.py` sudah diisi `TELEGRAM_BOT_TOKEN` dan `TELEGRAM_CHAT_ID`
+- [ ] Test manual (`python scheduler.py`) tidak error
+- [ ] Systemd service sudah `enabled` (auto-start saat VM reboot)
+- [ ] `.gitignore` sudah mengecualikan file yang berisi token/secret
