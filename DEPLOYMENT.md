@@ -234,11 +234,11 @@ systemctl status ihsg-scanner
 
 | Aksi | Command |
 |------|---------|
-| Lihat status | `systemctl status ihsg-scanner` |
-| Lihat log | `journalctl -u ihsg-scanner -f` |
-| Restart | `systemctl restart ihsg-scanner` |
-| Stop | `systemctl stop ihsg-scanner` |
-| Start | `systemctl start ihsg-scanner` |
+| Lihat status | `systemctl status ihsg-scanner-v2` |
+| Lihat log | `journalctl -u ihsg-scanner-v2 -f` |
+| Restart | `systemctl restart ihsg-scanner-v2` |
+| Stop | `systemctl stop ihsg-scanner-v2` |
+| Start | `systemctl start ihsg-scanner-v2` |
 
 ---
 

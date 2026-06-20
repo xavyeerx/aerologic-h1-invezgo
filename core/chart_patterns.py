@@ -25,8 +25,6 @@ from config.settings import (
     CHART_PENNANT_IMPULSE_MIN_PCT,
     CHART_PENNANT_MAX_RANGE_PCT,
     CHART_TOUCH_ATR_MULT,
-    CHART_HARM_FIB_RATIOS,
-    CHART_HARM_ZONE_ATR_MULT,
     CHART_FALSE_BREAK_LOOKBACK,
     CHART_MIN_BARS,
     EMA_FAST,
@@ -81,7 +79,6 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
         "falling_wedge_break": False,
         "bullish_pennant": False,
         "reject_dynamic_support": False,
-        "reject_harmonic_support": False,
         "false_break_support": False,
     }
 
@@ -195,21 +192,6 @@ def detect_bullish_chart_patterns(df: pd.DataFrame) -> Dict[str, bool]:
         if touched and reclaimed:
             out["reject_dynamic_support"] = True
 
-    # --- Reject "harmonic" support (zona fib kasar pada range terakhir) ---
-    if atr > 0:
-        win = df.iloc[-45:-3]
-        if len(win) > 10:
-            hi = float(win["high"].max())
-            lo = float(win["low"].min())
-            if hi > lo:
-                band = CHART_HARM_ZONE_ATR_MULT * atr
-                low = float(last["low"])
-                for ratio in CHART_HARM_FIB_RATIOS:
-                    lvl = lo + ratio * (hi - lo)
-                    if low <= lvl + band and low >= lvl - band * 2 and close > lvl:
-                        out["reject_harmonic_support"] = True
-                        break
-
     # --- False break support (bear trap ringan) ---
     lb = CHART_FALSE_BREAK_LOOKBACK
     if len(df) >= lb + 3:
@@ -230,7 +212,6 @@ PATTERN_LABELS = {
     "falling_wedge_break": "Falling Wedge Breakout",
     "bullish_pennant": "Bullish Pennant",
     "reject_dynamic_support": "Reject Dynamic Support",
-    "reject_harmonic_support": "Reject Harmonic Support",
     "false_break_support": "False Break Support",
 }
 

@@ -234,6 +234,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         "strong_buy": [],
         "accumulation": [],
         "early_entry": [],
+        "bull_div": [],
     }
     for signal_type, signal_list in all_signals.items():
         claimed = []
