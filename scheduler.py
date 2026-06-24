@@ -407,10 +407,9 @@ def main():
                     send_telegram_message(
                         f"⚠️ Scanner Error: {type(e).__name__}: {e}"
                     )
-                # Jeda 5 menit antar scan — data TF daily tidak berubah lebih cepat,
-                # dan memberi napas ke Yahoo agar tidak rate-limit (900+ ticker)
-                logger.info("⏸ Jeda 5 menit sebelum scan berikutnya...")
-                time.sleep(5 * 60)
+                # Jeda 1 menit antar scan — cukup untuk hindari rate-limit yfinance
+                logger.info("⏸ Jeda 1 menit sebelum scan berikutnya...")
+                time.sleep(60)
                 continue
 
             # Closing recap (16:00)
