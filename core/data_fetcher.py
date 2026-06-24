@@ -24,7 +24,7 @@ warnings.filterwarnings(
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 100
-BATCH_DELAY = 1.5   # detik antar batch — dinaikkan dari 0.35 untuk hindari rate-limit Yahoo (900+ ticker)
+BATCH_DELAY = 0.5   # detik antar batch — cukup untuk hindari rate-limit Yahoo tanpa delay signifikan
 MAX_RETRIES = 3
 
 # DATA_PERIOD (mis. 90d) = target lebar seri; buffer kalender tambah hari non-dagang/libur IDX
