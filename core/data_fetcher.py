@@ -24,7 +24,7 @@ warnings.filterwarnings(
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 100
-BATCH_DELAY = 0.35
+BATCH_DELAY = 1.5   # detik antar batch — dinaikkan dari 0.35 untuk hindari rate-limit Yahoo (900+ ticker)
 MAX_RETRIES = 3
 
 # DATA_PERIOD (mis. 90d) = target lebar seri; buffer kalender tambah hari non-dagang/libur IDX
@@ -297,8 +297,7 @@ def _merge_daily_month_tail_overlay(results: dict, period: str, interval: str, d
     return results
 
 
-def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str = "15m",
-                          delay: float = 0.1) -> dict:
+def fetch_multiple_stocks(tickers: List[str], period: str = "60d", interval: str = "15m") -> dict:
     """
     Fetch data for multiple stocks using batch download.
     Splits tickers into chunks processed via yf.download() to avoid rate limiting.

@@ -407,6 +407,9 @@ def main():
                     send_telegram_message(
                         f"⚠️ Scanner Error: {type(e).__name__}: {e}"
                     )
+                # Jeda 60 detik antar scan — hindari rate-limit yfinance (900+ ticker)
+                logger.info("⏸ Jeda 60 detik sebelum scan berikutnya...")
+                time.sleep(60)
                 continue
 
             # Closing recap (16:00)
