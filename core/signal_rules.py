@@ -34,9 +34,9 @@ _PROFILES: dict[str, dict] = {
         "enable_counter_trend": False,
     },
     "BEAR": {
-        "engulf_min_score": 28,
+        "engulf_min_score": 26,
         "breakout_min_score": 42,
-        "st_min_score": 30,
+        "st_min_score": 28,
         "div_min_score": 25,
         "require_adx_breakout": False,
         "require_bullish_trend_engulf": False,
