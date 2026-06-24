@@ -156,7 +156,6 @@ class StateManager:
             'strong_buy': [],
             'accumulation': [],
             'early_entry': [],
-            'bull_div': [],
             'chart_patterns': [],
             'morning_patterns_scanned_done_on': '',
         }

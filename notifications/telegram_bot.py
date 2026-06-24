@@ -453,11 +453,6 @@ def send_all_alerts(signals: dict) -> int:
     if signals.get('accumulation'):
         messages_sent += send_chunked_alert(signals['accumulation'], format_accumulation_message)
 
-    if signals.get('bull_div'):
-        msg = format_bull_div_message(signals['bull_div'])
-        if send_telegram_message(msg):
-            messages_sent += 1
-
     if signals.get('early_entry'):
         messages_sent += send_chunked_alert(signals['early_entry'], format_early_entry_message)
     

@@ -219,7 +219,6 @@ def analyze_stock(
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
         st_volume_ok = has_volume_signal if sb.get("st_use_spike_volume", True) else engulf_volume_ok
         has_bull_div = bool(latest.get("bullish_divergence", False))
-        div_strength_val = int(latest.get("div_strength", 0))
         trend_engulf = has_early_reversal_bias(
             latest,
             is_bullish_trend=is_bullish_trend,
@@ -269,16 +268,17 @@ def analyze_stock(
         ):
             result.is_strong_buy = True
             result.is_counter_trend = True
-
-        # ── BULL DIV alert (standalone) ──
-        if has_bull_div and not is_bullish_trend:
-            result.div_strength = div_strength_val
-            if div_strength_val >= 3:
-                result.div_grade = "STRONG"
-            elif div_strength_val >= 1:
-                result.div_grade = "MODERATE"
-            else:
-                result.div_grade = "WEAK"
+        elif (
+            has_bull_div
+            and has_volume_signal
+            and (
+                result.is_supertrend_flip
+                or reversal_candle
+                or result.is_price_breakout
+            )
+            and result.score >= sb["div_min_score"]
+        ):
+            result.is_strong_buy = True
             result.is_bull_div = True
 
         # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
@@ -480,7 +480,6 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
         'strong_buy': [],       # Was bullish_break
         'accumulation': [],
         'early_entry': [],
-        'bull_div': [],
     }
 
     for ticker, result in results.items():
@@ -494,8 +493,6 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
             signals['accumulation'].append(result)
         if result.is_early_entry:
             signals['early_entry'].append(result)
-        if result.is_bull_div:
-            signals['bull_div'].append(result)
     
     return signals
 
