@@ -86,7 +86,6 @@ def has_early_reversal_bias(
         is_bullish_trend
         or is_st_flip
         or latest.get("price_above_ema20", False)
-        or latest.get("bullish_divergence", False)
     )
 
 

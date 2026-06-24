@@ -61,7 +61,6 @@ def main():
                 'strong_buy':   data.get('strong_buy',   []),
                 'accumulation': data.get('accumulation', []),
                 'early_entry':  data.get('early_entry',  []),
-                'bull_div':     data.get('bull_div',     []),
             }
             total = sum(len(v) for v in alerted_today.values())
             logger.info(f"✅ Ditemukan {total} sinyal hari ini dari daily_alerts.json")

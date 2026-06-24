@@ -159,17 +159,9 @@ def calculate_pattern_score(df: pd.DataFrame) -> float:
         score += 5.0
     elif row.get('bullish_pattern', False):
         score += 3.0
-    
-    # Bullish divergence: +1 to +4 based on strength
-    if row.get('bullish_divergence', False):
-        strength = row.get('div_strength', 0)
-        if strength >= 3:
-            score += 4.0
-        elif strength >= 1:
-            score += 2.0
-        else:
-            score += 1.0
-    
+    else:
+        score += 1.0
+
     return min(score, 5.0)
 
 

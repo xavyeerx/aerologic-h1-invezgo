@@ -41,9 +41,6 @@ class ScanResult:
         self.is_strong_buy = False        # v5: confirmed breakout + high score
         self.is_accumulation = False
         self.is_early_entry = False
-        self.is_bull_div = False           # NEW v5: bullish divergence
-        self.div_strength = 0              # v5.1: 0-5 strength score
-        self.div_grade = ""                # v5.1: "STRONG" / "MODERATE" / ""
         
         # Target prices
         self.tp1 = 0.0              # Quick target  (entry + 1.0×ATR)
@@ -190,14 +187,10 @@ def analyze_stock(
         # Pattern name
         result.pattern_name = latest.get('pattern_name', '')
         
-        # Divergence status
-        if latest.get('bullish_divergence', False):
-            result.divergence_status = "🟢 BULL DIV"
-        elif latest.get('bearish_divergence', False):
-            result.divergence_status = "🔴 BEAR DIV"
-        else:
-            result.divergence_status = ""
-        
+        # Divergence status (bearish only — bull div dihapus dari sinyal)
+        result.divergence_status = "🔴 BEAR DIV" if latest.get('bearish_divergence', False) else ""
+
+
         # Price change vs penutupan sesi sebelumnya (perbaikan glitch Yahoo intraday)
         result.change_percent = compute_session_change_percent(df, ticker)
         
@@ -218,7 +211,6 @@ def analyze_stock(
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
         st_volume_ok = has_volume_signal if sb.get("st_use_spike_volume", True) else engulf_volume_ok
-        has_bull_div = bool(latest.get("bullish_divergence", False))
         trend_engulf = has_early_reversal_bias(
             latest,
             is_bullish_trend=is_bullish_trend,
@@ -268,19 +260,6 @@ def analyze_stock(
         ):
             result.is_strong_buy = True
             result.is_counter_trend = True
-        elif (
-            has_bull_div
-            and has_volume_signal
-            and (
-                result.is_supertrend_flip
-                or reversal_candle
-                or result.is_price_breakout
-            )
-            and result.score >= sb["div_min_score"]
-        ):
-            result.is_strong_buy = True
-            result.is_bull_div = True
-
         # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
         # if USE_SUPERTREND:
         #     breakout_up = just_turned_bullish(df)

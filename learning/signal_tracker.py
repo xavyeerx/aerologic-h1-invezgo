@@ -51,7 +51,6 @@ _SIGNAL_TYPE_MAP = {
     'strong_buy':   'STRONG_BUY',
     'accumulation': 'ACCUMULATION',
     'early_entry':  'EARLY_ENTRY',
-    'bull_div':     'BULL_DIV',
 }
 
 
@@ -205,7 +204,6 @@ def get_active_signal_tickers_by_type(lookback_days: int = 14) -> dict:
         'strong_buy': set(),
         'accumulation': set(),
         'early_entry': set(),
-        'bull_div': set(),
     }
 
     if not is_available():

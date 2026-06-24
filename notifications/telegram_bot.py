@@ -129,10 +129,8 @@ def format_strong_buy_message(
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
         trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
             "RS-BEAR▲" if getattr(r, "is_counter_trend", False) else (
-                "BULL-DIV▲" if getattr(r, "is_bull_div", False) else (
-                    "ST▲" if getattr(r, "is_supertrend_flip", False) else (
-                        "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
-                    )
+                "ST▲" if getattr(r, "is_supertrend_flip", False) else (
+                    "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
                 )
             )
         )
@@ -158,55 +156,6 @@ def format_strong_buy_message(
     else:
         lines.append(f"Total: {total} saham strong buy")
     
-    return "\n".join(lines)
-
-
-def format_bull_div_message(results: List) -> str:
-    """Format Bullish Divergence alert message (v5.1 Enhanced)"""
-    if not results:
-        return ""
-
-    strong = [r for r in results if getattr(r, 'div_grade', '') == 'STRONG']
-    moderate = [r for r in results if getattr(r, 'div_grade', '') == 'MODERATE']
-
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🔀 <b>BULLISH DIVERGENCE</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
-    ]
-
-    if strong:
-        lines.append("🔥 <b>STRONG</b>")
-        for r in strong:
-            ticker_clean = r.ticker.replace('.JK', '')
-            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-            strength = getattr(r, 'div_strength', 0)
-            lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
-            tp_info = _format_tp_info(r)
-            if tp_info:
-                lines.append(tp_info)
-            lines.append("")
-
-    if moderate:
-        lines.append("📊 <b>MODERATE</b>")
-        for r in moderate:
-            ticker_clean = r.ticker.replace('.JK', '')
-            change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-            strength = getattr(r, 'div_strength', 0)
-            lines.append(f"🟡 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-            lines.append(f"   └─ Score: {r.score} | Stoch: K{r.stoch_k:.0f}/D{r.stoch_d:.0f} | Str: {strength}/6")
-            tp_info = _format_tp_info(r)
-            if tp_info:
-                lines.append(tp_info)
-            lines.append("")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("💡 <i>Pivot low + RSI higher low = potensi reversal</i>")
-    lines.append(f"Total: {len(results)} ({len(strong)} strong, {len(moderate)} moderate)")
-
     return "\n".join(lines)
 
 
