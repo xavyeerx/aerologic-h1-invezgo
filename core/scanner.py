@@ -78,6 +78,13 @@ class ScanResult:
         self.atr_pct = 0.0                 # ATR / close × 100 (relatif volatility)
 
 
+def _bars_above_supertrend(df, n: int = 2) -> bool:
+    """True jika n bar terakhir berturut-turut di atas supertrend (direction == 1)."""
+    if len(df) < n:
+        return False
+    return all(df.iloc[-(i + 1)]['direction'] == 1 for i in range(n))
+
+
 def analyze_stock(
     ticker: str,
     df: pd.DataFrame,
@@ -217,28 +224,12 @@ def analyze_stock(
             is_st_flip=result.is_supertrend_flip,
             require_full_trend=sb["require_bullish_trend_engulf"],
         )
-        trend_breakout = has_early_reversal_bias(
-            latest,
-            is_bullish_trend=is_bullish_trend,
-            is_st_flip=result.is_supertrend_flip,
-            require_full_trend=sb["require_bullish_trend_breakout"],
-        )
-        adx_ok = result.is_trending if sb["require_adx_breakout"] else True
-
-        # ── STRONG BUY (regime-adaptive): engulf | breakout | ST | counter-trend ──
+        # ── STRONG BUY (regime-adaptive): engulf | ST | counter-trend ──
         if (
             reversal_candle
             and engulf_volume_ok
             and trend_engulf
             and result.score >= sb["engulf_min_score"]
-        ):
-            result.is_strong_buy = True
-        elif (
-            has_volume_signal
-            and result.is_price_breakout
-            and result.score >= sb["breakout_min_score"]
-            and trend_breakout
-            and adx_ok
         ):
             result.is_strong_buy = True
         elif (
@@ -260,29 +251,14 @@ def analyze_stock(
         ):
             result.is_strong_buy = True
             result.is_counter_trend = True
-        # ── STRONG BUY lama (supertrend + konfirmasi 2 bar) — nonaktif ──
-        # if USE_SUPERTREND:
-        #     breakout_up = just_turned_bullish(df)
-        #     if is_bullish_trend:
-        #         bars_above = 0
-        #         for i in range(len(df) - 1, max(len(df) - CONFIRMATION_BARS - 5, 0), -1):
-        #             if df.iloc[i]['direction'] == 1 and df.iloc[i]['close'] > df.iloc[i]['supertrend']:
-        #                 bars_above += 1
-        #             else:
-        #                 break
-        #         breakout_confirmed = bars_above >= CONFIRMATION_BARS
-        #     else:
-        #         breakout_confirmed = False
-        #     recent_breakout = False
-        #     for i in range(1, min(CONFIRMATION_BARS + 2, len(df))):
-        #         idx = len(df) - 1 - i
-        #         if idx >= 1 and df.iloc[idx - 1]['direction'] == -1 and df.iloc[idx]['direction'] == 1:
-        #             recent_breakout = True
-        #             break
-        #     if breakout_up:
-        #         recent_breakout = True
-        #     if is_bullish_trend and (breakout_confirmed or breakout_up) and recent_breakout and result.score >= BUY_THRESHOLD:
-        #         result.is_strong_buy = True
+        elif (
+            STRONG_BUY_SUPERTREND_ENABLED
+            and is_bullish_trend
+            and _bars_above_supertrend(df, n=2)
+            and has_volume_signal
+            and result.score >= sb["st_min_score"]
+        ):
+            result.is_strong_buy = True
 
         # 2. ACCUMULATION — Stoch: K < 35 ATAU golden cross valid (K < ACCUM_STOCH_CROSS_K_MAX, default 70)
         stoch_k = float(latest.get('stoch_k', 50.0))

@@ -90,12 +90,8 @@ def has_early_reversal_bias(
 
 
 def has_reversal_candle(latest) -> bool:
-    """Pola candle bullish (engulf, hammer, morning star)."""
-    return bool(
-        latest.get("bullish_engulfing", False)
-        or latest.get("is_hammer", False)
-        or latest.get("morning_star", False)
-    )
+    """Pola candle bullish: hanya bullish engulfing."""
+    return bool(latest.get("bullish_engulfing", False))
 
 
 def has_momentum_trigger(latest) -> bool:
