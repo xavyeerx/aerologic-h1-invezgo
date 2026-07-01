@@ -102,3 +102,11 @@ IHSG_STOCKS = [
     "WIFI.JK", "WIIM.JK", "WINS.JK", "WIRG.JK", "WMPP.JK",
     "WMUU.JK", "WOWS.JK", "YELO.JK", "YOII.JK", "ZATA.JK",
 ]
+
+
+def get_all_stocks():
+    return IHSG_STOCKS
+
+
+def get_stock_count():
+    return len(IHSG_STOCKS)
