@@ -453,11 +453,20 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
 
     if recap_type == "OPENING":
         logger.info(f"Opening recap: {total_signals} saham match.")
-        active_signals = state_manager.get_active_signals()
+        # Hanya tampilkan sinyal aktif yang masih valid di logika sekarang
+        valid_tickers = {
+            r.ticker
+            for signals in all_current_signals.values()
+            for r in signals
+        }
+        active_signals = [
+            s for s in state_manager.get_active_signals()
+            if s['ticker'] in valid_tickers
+        ]
         if active_signals:
             send_active_signals_morning(active_signals)
         else:
-            logger.info("Opening recap: tidak ada sinyal aktif.")
+            logger.info("Opening recap: tidak ada sinyal aktif yang valid.")
     elif recap_type == "CLOSING":
         daily_summary = state_manager.get_daily_summary()
         total_daily = sum(len(v) for k, v in daily_summary.items() if k != 'date')
