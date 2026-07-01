@@ -133,7 +133,7 @@ def format_strong_buy_message(
         elif getattr(r, "is_st_continuation", False):
             trigger = "ST-CONT — 2 bar di atas supertrend + volume"
         else:
-            trigger = "VOL — volume spike tanpa event khusus"
+            trigger = "?"
         regime_tag = getattr(r, "market_regime", "") or ""
         regime_suffix = f" | Mkt:{regime_tag}" if regime_tag and regime_tag != "UNKNOWN" else ""
         lines.append(
