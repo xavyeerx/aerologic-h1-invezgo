@@ -137,8 +137,7 @@ def format_strong_buy_message(
         regime_tag = getattr(r, "market_regime", "") or ""
         regime_suffix = f" | Mkt:{regime_tag}" if regime_tag and regime_tag != "UNKNOWN" else ""
         lines.append(
-            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x | "
-            f"{getattr(r, 'pattern_name', None) or '-'}{regime_suffix}"
+            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x{regime_suffix}"
         )
         tp_info = _format_tp_info(r)
         if tp_info:

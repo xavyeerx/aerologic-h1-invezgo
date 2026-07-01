@@ -224,16 +224,19 @@ def analyze_stock(
             is_st_flip=result.is_supertrend_flip,
             require_full_trend=sb["require_bullish_trend_engulf"],
         )
-        # ── STRONG BUY (regime-adaptive): engulf | ST | counter-trend ──
+        # ── STRONG BUY (regime-adaptive): wajib hijau — minus = jebakan ARB ──
+        is_green = result.change_percent > 0
         if (
-            reversal_candle
+            is_green
+            and reversal_candle
             and engulf_volume_ok
             and trend_engulf
             and result.score >= sb["engulf_min_score"]
         ):
             result.is_strong_buy = True
         elif (
-            STRONG_BUY_SUPERTREND_ENABLED
+            is_green
+            and STRONG_BUY_SUPERTREND_ENABLED
             and result.is_supertrend_flip
             and st_volume_ok
             and result.score >= sb["st_min_score"]
@@ -252,7 +255,8 @@ def analyze_stock(
             result.is_strong_buy = True
             result.is_counter_trend = True
         elif (
-            STRONG_BUY_SUPERTREND_ENABLED
+            is_green
+            and STRONG_BUY_SUPERTREND_ENABLED
             and is_bullish_trend
             and _bars_above_supertrend(df, n=2)
             and has_volume_signal
