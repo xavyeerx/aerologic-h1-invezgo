@@ -19,7 +19,7 @@ from config.stocks_list import get_all_stocks, get_stock_count
 from core.data_fetcher import fetch_multiple_stocks, compute_session_change_percent
 from core.scanner import scan_all_stocks, filter_signals, filter_all_current_signals, has_any_signal
 from database.state_manager import StateManager
-from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_chart_pattern_morning_digest
+from notifications.telegram_bot import send_all_alerts, send_startup_message, send_daily_recap_message, send_chart_pattern_morning_digest, send_active_signals_morning
 
 # ── Learning system (graceful degradation jika DB tidak ada) ───────────
 try:
@@ -452,10 +452,12 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
         return
 
     if recap_type == "OPENING":
-        # Opening recap: scan + update state saja — tidak kirim "EVENING SCAN" ke Telegram
-        logger.info(
-            f"Opening recap: {total_signals} saham match (state diperbarui, tanpa broadcast Telegram)."
-        )
+        logger.info(f"Opening recap: {total_signals} saham match.")
+        active_signals = state_manager.get_active_signals()
+        if active_signals:
+            send_active_signals_morning(active_signals)
+        else:
+            logger.info("Opening recap: tidak ada sinyal aktif.")
     elif recap_type == "CLOSING":
         daily_summary = state_manager.get_daily_summary()
         total_daily = sum(len(v) for k, v in daily_summary.items() if k != 'date')

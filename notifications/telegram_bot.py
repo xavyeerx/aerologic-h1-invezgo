@@ -486,74 +486,39 @@ def send_daily_recap_message(daily_summary: dict):
 
 
 def send_evaluation_message(outcome: dict):
-    """Send daily TP/SL evaluation recap at 16:30 WIB."""
-    tp1_hit = outcome.get('tp1_hit', [])
-    tp2_hit = outcome.get('tp2_hit', [])
-    sl_hit = outcome.get('sl_hit', [])
-    active = outcome.get('active', [])
+    """Evaluasi 16:30 — hanya logging, tidak kirim Telegram."""
+    tp1 = len(outcome.get('tp1_hit', []))
+    tp2 = len(outcome.get('tp2_hit', []))
+    sl  = len(outcome.get('sl_hit', []))
+    act = len(outcome.get('active', []))
+    logger.info(f"[Evaluation] TP1={tp1} TP2={tp2} SL={sl} active={act}")
 
-    total_resolved = len(tp1_hit) + len(tp2_hit) + len(sl_hit)
-    if total_resolved == 0 and len(active) == 0:
+
+def send_active_signals_morning(active_signals: list):
+    """Kirim daftar sinyal yang masih valid setiap pagi (08:30)."""
+    if not active_signals:
         return
 
     lines = [
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "📊 <b>EVALUASI SINYAL HARIAN</b>",
+        "🌅 <b>SINYAL MASIH AKTIF HARI INI</b>",
         "━━━━━━━━━━━━━━━━━━━━━━━━━━",
         f"⏰ {get_current_time_wib()}",
-        ""
+        "",
     ]
 
-    if tp2_hit:
-        lines.append(f"🏆 <b>HIT TP2</b> ({len(tp2_hit)})")
-        for s in tp2_hit:
-            t = s['ticker'].replace('.JK', '')
-            entry = s['entry_price']
-            hit = s.get('hit_price', 0)
-            pnl = ((hit - entry) / entry) * 100 if entry > 0 else 0
-            lines.append(f"  ✅ {t} | Entry: {entry:,.0f} -> {hit:,.0f} (+{pnl:.1f}%)")
-            lines.append(f"     {s['signal_type']} | Alert: {s['alert_date']}")
+    for s in active_signals:
+        t = s['ticker'].replace('.JK', '')
+        entry = s['entry_price']
+        tp1   = s.get('tp1', 0)
+        sl    = s.get('sl', 0)
+        alert_date = s.get('alert_date', '')
+        lines.append(f"🟡 <b>{t}</b> | Entry: {entry:,.0f}")
+        lines.append(f"   🎯 TP1: {tp1:,.0f} | 🛑 SL: {sl:,.0f} | 📅 {alert_date}")
         lines.append("")
-
-    if tp1_hit:
-        lines.append(f"🎯 <b>HIT TP1</b> ({len(tp1_hit)})")
-        for s in tp1_hit:
-            t = s['ticker'].replace('.JK', '')
-            entry = s['entry_price']
-            hit = s.get('hit_price', 0)
-            pnl = ((hit - entry) / entry) * 100 if entry > 0 else 0
-            lines.append(f"  ✅ {t} | Entry: {entry:,.0f} -> {hit:,.0f} (+{pnl:.1f}%)")
-            lines.append(f"     {s['signal_type']} | Alert: {s['alert_date']}")
-        lines.append("")
-
-    if sl_hit:
-        lines.append(f"🛑 <b>HIT SL</b> ({len(sl_hit)})")
-        for s in sl_hit:
-            t = s['ticker'].replace('.JK', '')
-            entry = s['entry_price']
-            hit = s.get('hit_price', 0)
-            pnl = ((hit - entry) / entry) * 100 if entry > 0 else 0
-            lines.append(f"  ❌ {t} | Entry: {entry:,.0f} -> {hit:,.0f} ({pnl:.1f}%)")
-            lines.append(f"     {s['signal_type']} | Alert: {s['alert_date']}")
-        lines.append("")
-
-    if active:
-        lines.append(f"⏳ <b>MASIH AKTIF</b> ({len(active)})")
-        for s in active:
-            t = s['ticker'].replace('.JK', '')
-            lines.append(f"  {t} | Entry: {s['entry_price']:,.0f} | "
-                         f"TP1: {s.get('tp1', 0):,.0f} | SL: {s.get('sl', 0):,.0f}")
-        lines.append("")
-
-    win = len(tp1_hit) + len(tp2_hit)
-    lose = len(sl_hit)
-    total = win + lose
-    winrate = (win / total * 100) if total > 0 else 0
 
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    if total > 0:
-        lines.append(f"📈 Win: {win} | Loss: {lose} | WR: {winrate:.0f}%")
-    lines.append(f"⏳ Masih aktif: {len(active)} sinyal")
+    lines.append(f"⏳ Total aktif: {len(active_signals)} sinyal")
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     send_telegram_message("\n".join(lines))
