@@ -217,7 +217,10 @@ def analyze_stock(
             latest.get('is_unusual_volume', False) or latest.get('is_volume_spike', False)
         )
         engulf_volume_ok = vol_ratio >= float(ENGULF_MIN_VOLUME_RATIO)
-        st_volume_ok = has_volume_signal if sb.get("st_use_spike_volume", True) else engulf_volume_ok
+        # ST flip: cukup volume >= rata-rata (1.0×) — flip itu sendiri sudah event kuat
+        st_flip_volume_ok = vol_ratio >= 1.0
+        # 2-bar ST continuation: tetap butuh spike/unusual sebagai katalis hari ini
+        st_cont_volume_ok = has_volume_signal
         trend_engulf = has_early_reversal_bias(
             latest,
             is_bullish_trend=is_bullish_trend,
@@ -238,7 +241,7 @@ def analyze_stock(
             is_green
             and STRONG_BUY_SUPERTREND_ENABLED
             and result.is_supertrend_flip
-            and st_volume_ok
+            and st_flip_volume_ok
             and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
@@ -259,7 +262,7 @@ def analyze_stock(
             and STRONG_BUY_SUPERTREND_ENABLED
             and is_bullish_trend
             and _bars_above_supertrend(df, n=2)
-            and has_volume_signal
+            and st_cont_volume_ok
             and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
