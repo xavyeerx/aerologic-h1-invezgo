@@ -69,6 +69,7 @@ class ScanResult:
         self.is_bullish_engulfing = False
         self.is_price_breakout = False
         self.is_supertrend_flip = False
+        self.is_st_continuation = False
         self.is_counter_trend = False
         self.market_regime = "UNKNOWN"
 
@@ -285,6 +286,7 @@ def analyze_stock(
             and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
+            result.is_st_continuation = True
 
         # 2. ACCUMULATION — Stoch: K < 35 ATAU golden cross valid (K < ACCUM_STOCH_CROSS_K_MAX, default 70)
         stoch_k = float(latest.get('stoch_k', 50.0))

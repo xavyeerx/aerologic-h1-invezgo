@@ -124,13 +124,16 @@ def format_strong_buy_message(
         ticker_clean = r.ticker.replace('.JK', '')
         change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
         lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-        trigger = "ENGULF▲" if getattr(r, "is_bullish_engulfing", False) else (
-            "RS-BEAR▲" if getattr(r, "is_counter_trend", False) else (
-                "ST▲" if getattr(r, "is_supertrend_flip", False) else (
-                    "BREAKOUT+VOL" if getattr(r, "is_price_breakout", False) else "VOL"
-                )
-            )
-        )
+        if getattr(r, "is_bullish_engulfing", False):
+            trigger = "ENGULF — candle bullish engulfing + volume"
+        elif getattr(r, "is_counter_trend", False):
+            trigger = "RS-BEAR — saham kuat saat IHSG lemah"
+        elif getattr(r, "is_supertrend_flip", False):
+            trigger = "ST-FLIP — supertrend baru balik bullish"
+        elif getattr(r, "is_st_continuation", False):
+            trigger = "ST-CONT — 2 bar di atas supertrend + volume"
+        else:
+            trigger = "VOL — volume spike tanpa event khusus"
         regime_tag = getattr(r, "market_regime", "") or ""
         regime_suffix = f" | Mkt:{regime_tag}" if regime_tag and regime_tag != "UNKNOWN" else ""
         lines.append(
