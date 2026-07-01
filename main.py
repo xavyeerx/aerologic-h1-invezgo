@@ -456,8 +456,8 @@ def run_full_recap(state_manager: StateManager, recap_type: str = "OPENING"):
         # Hanya tampilkan sinyal aktif yang masih valid di logika sekarang
         valid_tickers = {
             r.ticker
-            for signals in all_current_signals.values()
-            for r in signals
+            for key in ('strong_buy', 'early_entry')
+            for r in all_current_signals.get(key, [])
         }
         active_signals = [
             s for s in state_manager.get_active_signals()
