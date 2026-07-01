@@ -13,9 +13,6 @@ sys.path.append('..')
 from config.settings import (
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    BUY_THRESHOLD,
-    ENGULF_MIN_VOLUME_RATIO,
-    STRONG_BUY_ENGULF_MIN_SCORE,
     CHART_PATTERN_ALERT_HOUR,
     CHART_PATTERN_ALERT_MINUTE,
     CHART_PATTERN_FORCE_SCHEDULED_ONLY,
@@ -139,16 +136,15 @@ def format_strong_buy_message(
         lines.append(
             f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x{regime_suffix}"
         )
+        st_val = getattr(r, "supertrend_value", 0.0) or 0.0
+        if st_val > 0:
+            lines.append(f"   ⚠️ Jaga ST: {st_val:,.0f} — waspada jika closing di bawah harga ini")
         tp_info = _format_tp_info(r)
         if tp_info:
             lines.append(tp_info)
         lines.append("")
-    
+
     lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(
-        f"💡 <i>Threshold adaptif per regime IHSG. BEAR: counter-trend (hijau + vol + trigger) "
-        f"selain ST/engulf/breakout fresh. BULL: breakout + ADX + score ≥{BUY_THRESHOLD}</i>"
-    )
     total = total_count if total_count is not None else len(results)
     if total_count and len(results) < total_count:
         lines.append(f"Tampil: {len(results)} dari {total} saham strong buy")
