@@ -227,10 +227,24 @@ def analyze_stock(
             is_st_flip=result.is_supertrend_flip,
             require_full_trend=sb["require_bullish_trend_engulf"],
         )
+        # ── Candle quality filters (distribusi / guyuran) ──
+        # 1. Close harus di atas open (body bullish hari ini)
+        candle_open  = float(latest.get('open',  result.price))
+        candle_high  = float(latest.get('high',  result.price))
+        candle_low   = float(latest.get('low',   result.price))
+        candle_close = float(latest.get('close', result.price))
+        is_bullish_body = candle_close > candle_open
+        # 2. Upper wick tidak boleh dominan (> 50% range candle) — ciri distribusi
+        candle_range = candle_high - candle_low
+        upper_wick   = candle_high - candle_close
+        wick_ok = candle_range == 0 or (upper_wick / candle_range) <= 0.5
+
         # ── STRONG BUY (regime-adaptive): wajib hijau — minus = jebakan ARB ──
         is_green = result.change_percent > 0
+        candle_ok = is_bullish_body and wick_ok
         if (
             is_green
+            and candle_ok
             and reversal_candle
             and engulf_volume_ok
             and trend_engulf
@@ -239,26 +253,31 @@ def analyze_stock(
             result.is_strong_buy = True
         elif (
             is_green
+            and candle_ok
             and STRONG_BUY_SUPERTREND_ENABLED
             and result.is_supertrend_flip
             and st_flip_volume_ok
             and result.score >= sb["st_min_score"]
         ):
             result.is_strong_buy = True
-        elif counter_trend_strong_buy(
-            change_percent=result.change_percent,
-            score=result.score,
-            vol_ratio=vol_ratio,
-            latest=latest,
-            is_st_flip=result.is_supertrend_flip,
-            is_price_breakout=result.is_price_breakout,
-            profile=sb,
-            market_momentum_5d=market_momentum_5d,
+        elif (
+            candle_ok
+            and counter_trend_strong_buy(
+                change_percent=result.change_percent,
+                score=result.score,
+                vol_ratio=vol_ratio,
+                latest=latest,
+                is_st_flip=result.is_supertrend_flip,
+                is_price_breakout=result.is_price_breakout,
+                profile=sb,
+                market_momentum_5d=market_momentum_5d,
+            )
         ):
             result.is_strong_buy = True
             result.is_counter_trend = True
         elif (
             is_green
+            and candle_ok
             and STRONG_BUY_SUPERTREND_ENABLED
             and is_bullish_trend
             and _bars_above_supertrend(df, n=2)
