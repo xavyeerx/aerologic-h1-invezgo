@@ -139,9 +139,6 @@ def format_strong_buy_message(
         lines.append(
             f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x{regime_suffix}"
         )
-        st_val = getattr(r, "supertrend_value", 0.0) or 0.0
-        if st_val > 0:
-            lines.append(f"   ⚠️ Jaga ST: {st_val:,.0f} — waspada jika closing di bawah harga ini")
         tp_info = _format_tp_info(r)
         if tp_info:
             lines.append(tp_info)
