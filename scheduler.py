@@ -407,9 +407,9 @@ def main():
                     send_telegram_message(
                         f"⚠️ Scanner Error: {type(e).__name__}: {e}"
                     )
-                # Jeda 1 menit antar scan — cukup untuk hindari rate-limit yfinance
-                logger.info("⏸ Jeda 1 menit sebelum scan berikutnya...")
-                time.sleep(60)
+                # Jeda singkat antar scan — batch download sudah punya delay & retry-backoff sendiri
+                logger.info("⏸ Jeda 5 detik sebelum scan berikutnya...")
+                time.sleep(5)
                 continue
 
             # Closing recap (16:00)
