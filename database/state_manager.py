@@ -154,10 +154,8 @@ class StateManager:
         self.daily_alerts = {
             'date': today,
             'strong_buy': [],
-            'accumulation': [],
             'early_entry': [],
-            'chart_patterns': [],
-            'morning_patterns_scanned_done_on': '',
+            'reversal_watch': [],
         }
         self._save_daily_alerts()
         logger.info(f"Daily alerts reset for {today}")
@@ -211,30 +209,6 @@ class StateManager:
             self.daily_alerts[signal_type].append(ticker)
             self._save_daily_alerts()
 
-    def is_chart_combo_alerted(self, ticker: str, pattern_key: str) -> bool:
-        """Cegah kirim pola chart yang sama dua kali dalam satu hari."""
-        needle = f"{ticker}|{pattern_key}"
-        return needle in self.daily_alerts.get('chart_patterns', [])
-
-    def add_chart_pattern_alert(self, ticker: str, pattern_key: str):
-        if 'chart_patterns' not in self.daily_alerts:
-            self.daily_alerts['chart_patterns'] = []
-        needle = f"{ticker}|{pattern_key}"
-        if needle not in self.daily_alerts['chart_patterns']:
-            self.daily_alerts['chart_patterns'].append(needle)
-            self._save_daily_alerts()
-
-    def morning_chart_patterns_already_scanned_today(self) -> bool:
-        today = datetime.now().strftime('%Y-%m-%d')
-        if self.daily_alerts.get('date') != today:
-            self._reset_daily_alerts()
-        return self.daily_alerts.get('morning_patterns_scanned_done_on') == today
-
-    def mark_morning_chart_patterns_scan_complete(self):
-        self.reset_daily_if_new_day()
-        self.daily_alerts['morning_patterns_scanned_done_on'] = datetime.now().strftime('%Y-%m-%d')
-        self._save_daily_alerts()
-    
     def add_alerted_stocks(self, signal_type: str, tickers: List[str]):
         """Mark multiple stocks as alerted"""
         for ticker in tickers:
@@ -357,6 +331,7 @@ class StateManager:
             return
         sl_price = result.price * 0.95
         tracker[key] = {
+            'signal_id': getattr(result, 'signal_id', None),
             'ticker': result.ticker,
             'signal_type': signal_type,
             'entry_price': result.price,
@@ -377,7 +352,6 @@ class StateManager:
             'obv_status': getattr(result, 'obv_status', '') or '',
             'tp2_source': getattr(result, 'tp2_source', 'ATR') or 'ATR',
             'correction_percent': getattr(result, 'correction_percent', 0.0),
-            'early_entry_strength': getattr(result, 'early_entry_strength', 0),
         }
         self._save_tracker(tracker)
         logger.info(f"[Tracker] Recorded {signal_type} for {result.ticker} "
@@ -388,8 +362,8 @@ class StateManager:
         today = datetime.now().strftime('%Y-%m-%d')
         grouped: Dict[str, List[dict]] = {
             'strong_buy': [],
-            'accumulation': [],
             'early_entry': [],
+            'reversal_watch': [],
         }
         for sig in self._load_tracker().values():
             if sig.get('alert_date') != today:

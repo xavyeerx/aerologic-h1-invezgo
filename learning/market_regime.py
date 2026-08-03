@@ -14,12 +14,16 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import Optional
 
-import yfinance as yf
+import pytz
+
+from core.data_provider import fetch_index, InvezgoError
 
 logger = logging.getLogger(__name__)
 
-IHSG_TICKER   = "^JKSE"
-FETCH_PERIOD  = "120d"    # data historis yang diambil
+WIB = pytz.timezone("Asia/Jakarta")
+
+IHSG_CODE     = "COMPOSITE"   # kode indeks IHSG di Invezgo
+FETCH_DAYS    = 180           # kalender; cukup utk MA50 + ADX14 bar dagang
 ADX_PERIOD    = 14
 MA_SHORT      = 20
 MA_LONG       = 50
@@ -63,28 +67,18 @@ def _calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.Series:
 
 
 def _fetch_ihsg() -> Optional[pd.DataFrame]:
-    """Fetch IHSG daily data dari Yahoo Finance"""
+    """Fetch IHSG (COMPOSITE) daily data dari Invezgo. DataFrame sudah bentuk
+    lowercase OHLCV + index tanggal naive WIB (via data_provider)."""
     try:
-        data = yf.download(
-            IHSG_TICKER,
-            period=FETCH_PERIOD,
-            interval="1d",
-            progress=False,
-            auto_adjust=True
-        )
+        today = datetime.now(WIB).date()
+        start = (today - timedelta(days=FETCH_DAYS)).strftime("%Y-%m-%d")
+        end = today.strftime("%Y-%m-%d")
+        data = fetch_index(IHSG_CODE, start, end)
         if data is None or data.empty or len(data) < MA_LONG + ADX_PERIOD:
             logger.warning("[MarketRegime] Data IHSG tidak cukup")
             return None
-
-        # Fix: yfinance versi baru return MultiIndex columns → flatten dulu
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
-        data.columns = data.columns.str.lower()
-
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
-        return data.dropna(subset=['close'])
-    except Exception as e:
+        return data.dropna(subset=["close"])
+    except InvezgoError as e:
         logger.warning(f"[MarketRegime] Gagal fetch IHSG: {e}")
         return None
 

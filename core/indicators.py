@@ -76,7 +76,7 @@ def calculate_stochastic_rsi(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> pd.DataFrame:
-    """Calculate Average True Range"""
+    """Calculate Average True Range (simple rolling mean — used for TP/SL)"""
     tr1 = df['high'] - df['low']
     tr2 = abs(df['high'] - df['close'].shift(1))
     tr3 = abs(df['low'] - df['close'].shift(1))
@@ -84,6 +84,126 @@ def calculate_atr(df: pd.DataFrame, period: int = ATR_PERIOD) -> pd.DataFrame:
     df['atr'] = df['tr'].rolling(window=period).mean()
     df['atr_percent'] = (df['atr'] / df['close']) * 100
     df['is_volatile_enough'] = df['atr_percent'] >= MIN_ATR_PERCENT
+    return df
+
+
+def calculate_supertrend(
+    df: pd.DataFrame,
+    period: int = None,
+    multiplier: float = None,
+) -> pd.DataFrame:
+    """
+    Supertrend — TradingView Pine Script v5 compatible.
+
+    Key difference vs naive implementations:
+    - ATR uses RMA (Wilder's Running Moving Average), NOT simple rolling mean.
+      RMA[i] = (RMA[i-1] * (period-1) + TR[i]) / period
+      This matches ta.rma() in Pine Script exactly.
+
+    Band logic ("pinch" — band only moves in one direction per trend):
+      upper_band = basic_upper   if basic_upper < prev_upper OR prev_close > prev_upper
+                   prev_upper    otherwise  (only tightens, never expands bearish band)
+      lower_band = basic_lower   if basic_lower > prev_lower OR prev_close < prev_lower
+                   prev_lower    otherwise  (only raises,  never drops bullish band)
+
+    Direction flip:
+      -1 -> 1  when close crosses ABOVE upper_band
+       1 -> -1 when close crosses BELOW lower_band
+
+    Supertrend line value:
+      direction == 1  (bullish) -> lower_band   (green line below price)
+      direction == -1 (bearish) -> upper_band   (red line above price)
+    """
+    if period is None:
+        period = SUPERTREND_PERIOD
+    if multiplier is None:
+        multiplier = SUPERTREND_MULTIPLIER
+
+    high  = df["high"].to_numpy(dtype=float)
+    low   = df["low"].to_numpy(dtype=float)
+    close = df["close"].to_numpy(dtype=float)
+    n     = len(close)
+
+    # --- RMA of True Range (matches ta.rma in Pine Script) ---
+    tr = np.zeros(n)
+    tr[0] = high[0] - low[0]
+    for i in range(1, n):
+        tr[i] = max(
+            high[i] - low[i],
+            abs(high[i] - close[i - 1]),
+            abs(low[i]  - close[i - 1]),
+        )
+
+    atr_rma = np.zeros(n)
+    # Initialise with SMA for the first full window (same as Pine Script warmup)
+    if n >= period:
+        atr_rma[period - 1] = tr[:period].mean()
+        for i in range(period, n):
+            atr_rma[i] = (atr_rma[i - 1] * (period - 1) + tr[i]) / period
+
+    # --- Basic bands ---
+    hl2         = (high + low) / 2.0
+    basic_upper = hl2 + multiplier * atr_rma
+    basic_lower = hl2 - multiplier * atr_rma
+
+    # --- Final bands with pinch logic ---
+    upper_band = np.full(n, np.nan)
+    lower_band = np.full(n, np.nan)
+    direction  = np.full(n, np.nan)
+    supertrend = np.full(n, np.nan)
+
+    start = period  # first valid bar
+    if n > start:
+        upper_band[start] = basic_upper[start]
+        lower_band[start] = basic_lower[start]
+        direction[start]  = 1  # assume bullish at initialisation
+        supertrend[start] = lower_band[start]
+
+        for i in range(start + 1, n):
+            # Upper band: only tighten (decrease); OR reset if prev close broke above it
+            if basic_upper[i] < upper_band[i - 1] or close[i - 1] > upper_band[i - 1]:
+                upper_band[i] = basic_upper[i]
+            else:
+                upper_band[i] = upper_band[i - 1]
+
+            # Lower band: only raise (increase); OR reset if prev close broke below it
+            if basic_lower[i] > lower_band[i - 1] or close[i - 1] < lower_band[i - 1]:
+                lower_band[i] = basic_lower[i]
+            else:
+                lower_band[i] = lower_band[i - 1]
+
+            # Direction flip logic
+            if direction[i - 1] == -1:          # was bearish
+                if close[i] > upper_band[i]:
+                    direction[i] = 1            # flip → bullish
+                else:
+                    direction[i] = -1
+            else:                               # was bullish
+                if close[i] < lower_band[i]:
+                    direction[i] = -1           # flip → bearish
+                else:
+                    direction[i] = 1
+
+            supertrend[i] = lower_band[i] if direction[i] == 1 else upper_band[i]
+
+    # Persist as Series and forward-fill warm-up rows
+    df["supertrend"]    = pd.Series(supertrend, index=df.index).ffill()
+    df["direction"]     = pd.Series(direction,  index=df.index).ffill().fillna(1).astype(int)
+    df["st_upper_band"] = pd.Series(upper_band, index=df.index).ffill()
+    df["st_lower_band"] = pd.Series(lower_band, index=df.index).ffill()
+
+    # --- Crossover signals (equiv. ta.crossover / ta.crossunder in Pine) ---
+    prev_close = df["close"].shift(1)
+    prev_st    = df["supertrend"].shift(1)
+    df["bullish_break"]  = (prev_close <= prev_st) & (df["close"] > df["supertrend"])
+    df["bearish_break"]  = (prev_close >= prev_st) & (df["close"] < df["supertrend"])
+    df["supertrend_changed"] = df["direction"] != df["direction"].shift(1)
+
+    # % distance from price to supertrend (positive = price above ST = bullish)
+    df["price_vs_supertrend_pct"] = (
+        (df["close"] - df["supertrend"]) / df["supertrend"] * 100.0
+    ).round(2)
+
     return df
 
 
@@ -111,7 +231,7 @@ def calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.DataFrame:
 
 def calculate_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate volume indicators including OBV"""
-    df['avg_volume']    = df['volume'].rolling(window=VOLUME_PERIOD).mean()
+    df['avg_volume'] = df['volume'].rolling(window=VOLUME_PERIOD).mean()
     df['volume_ratio']  = df['volume'] / df['avg_volume']
     df['is_volume_spike']   = df['volume_ratio'] >= VOLUME_SPIKE_THRESHOLD
     df['is_unusual_volume'] = df['volume_ratio'] >= UNUSUAL_VOLUME_THRESHOLD
@@ -119,8 +239,10 @@ def calculate_volume_analysis(df: pd.DataFrame) -> pd.DataFrame:
 
     price_change = df['close'].diff()
     df['price_change']    = price_change
-    df['volume_on_up']    = np.where(price_change > 0, df['volume'], 0)
-    df['volume_on_down']  = np.where(price_change < 0, df['volume'], 0)
+    # Keep downstream volume behavior comparable across AM/PM slots and partial bars.
+    relative_volume = df['volume_ratio'].replace([np.inf, -np.inf], np.nan).fillna(1.0)
+    df['volume_on_up']    = np.where(price_change > 0, relative_volume, 0)
+    df['volume_on_down']  = np.where(price_change < 0, relative_volume, 0)
     df['avg_volume_up']   = pd.Series(df['volume_on_up'],   index=df.index).rolling(window=VOLUME_PERIOD).mean()
     df['avg_volume_down'] = pd.Series(df['volume_on_down'], index=df.index).rolling(window=VOLUME_PERIOD).mean()
     df['volume_bias_bullish'] = df['avg_volume_up'] > df['avg_volume_down']
@@ -165,6 +287,7 @@ def calculate_candlestick_patterns(df: pd.DataFrame) -> pd.DataFrame:
     is_bull2 = df['close'].shift(2) > df['open'].shift(2)
     is_bear2 = df['close'].shift(2) < df['open'].shift(2)
 
+    # Use supertrend direction if available, fall back to neutral
     direction = df['direction'] if 'direction' in df.columns else pd.Series(0, index=df.index)
     is_bullish_trend = direction == 1
     is_bearish_trend = direction == -1
@@ -279,7 +402,7 @@ def _find_pivot_highs(df: pd.DataFrame, lookback: int = DIV_PIVOT_LOOKBACK) -> p
 def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
     """
     Detect RSI/Price divergence using pivot-based detection (v5.1 Enhanced).
-    
+
     Bullish divergence criteria (all must be met):
       1. Two confirmed pivot lows separated by DIV_MIN_SEPARATION..DIV_MAX_SEPARATION bars
       2. Price: second pivot low < first pivot low (lower low) by >= DIV_PRICE_MIN_DROP %
@@ -288,7 +411,7 @@ def calculate_divergence(df: pd.DataFrame) -> pd.DataFrame:
       5. Freshness: second pivot must be within DIV_FRESHNESS_BARS of the current bar
       6. Stoch K on signal bar <= DIV_STOCH_MAX_K (not already overbought)
       7. Volume at second low <= DIV_VOLUME_DECLINE_RATIO × volume at first low (selling exhaustion)
-    
+
     Strength scoring (0-6):
       +1 volume declining at second low (< 0.85× first low = selling exhaustion)
       +1 volume declining significantly (< 0.6× first low)
@@ -408,7 +531,6 @@ def calculate_targets(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-
 def calculate_momentum(df: pd.DataFrame, period: int = MOMENTUM_PERIOD) -> pd.DataFrame:
     """Calculate momentum indicators"""
     df['roc'] = ((df['close'] - df['close'].shift(period)) / df['close'].shift(period)) * 100
@@ -423,31 +545,31 @@ def calculate_dca_zones(df: pd.DataFrame) -> pd.DataFrame:
     df['swing_high'] = df['high'].rolling(window=DCA_LOOKBACK).max()
     df['swing_low']  = df['low'].rolling(window=DCA_LOOKBACK).min()
     df['swing_range'] = df['swing_high'] - df['swing_low']
-    
+
     # Fibonacci levels
     df['fib_618'] = df['swing_high'] - (df['swing_range'] * FIB_LEVEL_1 / 100)
     df['fib_850'] = df['swing_high'] - (df['swing_range'] * FIB_LEVEL_2 / 100)
-    
+
     # DCA zones
     df['in_dca_zone1'] = (df['close'] <= df['fib_618']) & (df['close'] > df['fib_850'])
     df['in_dca_zone2'] = df['close'] <= df['fib_850']
-    
+
     # Healthy correction detection
-    short_term_vol = df['volume'].rolling(window=5).mean()
-    df['is_low_volume_correction'] = short_term_vol < (df['avg_volume'] * DCA_VOLUME_THRESHOLD)
-    
+    short_term_vol = df['volume_ratio'].rolling(window=5).mean()
+    df['is_low_volume_correction'] = short_term_vol < DCA_VOLUME_THRESHOLD
+
     # Distribution detection
     recent_down_vol = pd.Series(df['volume_on_down']).rolling(window=5).mean()
     recent_up_vol = pd.Series(df['volume_on_up']).rolling(window=5).mean()
     df['is_distribution'] = recent_down_vol > (recent_up_vol * 1.5)
-    
+
     df['is_healthy_correction'] = df['is_low_volume_correction'] & ~df['is_distribution']
-    
+
     # Price from recent high
     recent_high = df['high'].rolling(window=10).max()
     df['price_from_high'] = (recent_high - df['close']) / recent_high * 100
     df['is_in_correction'] = df['price_from_high'] > 3  # Min 3% from high
-    
+
     # EMA touch detection
     if 'ema20' in df.columns:
         df['ema20_touch'] = (df['low'] <= df['ema20']) & (df['close'] > df['ema20'] * 0.99)
@@ -457,7 +579,7 @@ def calculate_dca_zones(df: pd.DataFrame) -> pd.DataFrame:
         df['ema50_touch'] = (df['low'] <= df['ema50']) & (df['close'] > df['ema50'] * 0.99)
     else:
         df['ema50_touch'] = False
-    
+
     return df
 
 
@@ -473,6 +595,9 @@ def calculate_all_indicators(df: pd.DataFrame) -> pd.DataFrame:
     calculate_macd(df)
     calculate_momentum(df)
     calculate_dca_zones(df)
+    # Supertrend dihitung sebelum candlestick patterns karena
+    # calculate_candlestick_patterns() membaca kolom 'direction'
+    calculate_supertrend(df)
     calculate_candlestick_patterns(df)
     calculate_support_resistance(df)
     calculate_price_breakout(df)

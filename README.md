@@ -112,8 +112,8 @@ Edit di `config/settings.py`:
 | Parameter | Default | Keterangan |
 |-----------|---------|------------|
 | SUPERTREND_PERIOD | 10 | Period Supertrend |
-| SUPERTREND_MULTIPLIER | 3.0 | Multiplier Supertrend |
-| SCAN_INTERVAL_MINUTES | 15 | Interval scan |
+| SUPERTREND_MULTIPLIER | 2.0 | Multiplier Supertrend |
+| SCAN_INTERVAL_MINUTES | 5 | Interval scan saat sesi aktif |
 | BUY_THRESHOLD | 60 | Minimum score untuk BUY |
 
 ## License

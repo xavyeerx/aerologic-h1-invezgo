@@ -17,14 +17,12 @@ def calculate_trend_score(df: pd.DataFrame) -> float:
     """Calculate trend score (max 25 points)"""
     if len(df) == 0:
         return 0.0
-    
+
     row = df.iloc[-1]
     score = 0.0
-    
-    bullish_trend = (
-        row.get('direction', -1) == 1
-        if USE_SUPERTREND
-        else bool(row.get('ema_bullish_alignment', False) or row.get('price_above_ema50', False))
+
+    bullish_trend = bool(
+        row.get('ema_bullish_alignment', False) or row.get('price_above_ema50', False)
     )
 
     if bullish_trend:
@@ -35,7 +33,7 @@ def calculate_trend_score(df: pd.DataFrame) -> float:
 
     if bullish_trend:
         score += 5.0
-    
+
     return min(score, 25.0)
 
 
@@ -77,11 +75,7 @@ def calculate_volume_score(df: pd.DataFrame) -> float:
         score += 7.0
     
     # OBV bullish + bullish trend: +4 (NEW v5)
-    obv_bullish_trend = (
-        row.get('direction', -1) == 1
-        if USE_SUPERTREND
-        else bool(row.get('price_above_ema20', False))
-    )
+    obv_bullish_trend = bool(row.get('price_above_ema20', False))
     if row.get('obv_bullish', False) and obv_bullish_trend:
         score += 4.0
     
@@ -109,11 +103,7 @@ def calculate_momentum_score(df: pd.DataFrame) -> float:
     stoch_cross_up = row.get('stoch_k_cross_up', False)
     stoch_cross_valid = stoch_cross_up and stoch_k < ACCUM_STOCH_CROSS_K_MAX
     stoch_zone = stoch_k < ACCUM_STOCH_K_MAX
-    mom_bullish = (
-        row.get('direction', -1) == 1
-        if USE_SUPERTREND
-        else bool(row.get('price_above_ema50', False))
-    )
+    mom_bullish = bool(row.get('price_above_ema50', False))
     if mom_bullish and (stoch_cross_valid or stoch_zone):
         score += 8.0
     

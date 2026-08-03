@@ -1,349 +1,176 @@
-# ============================================
-# TELEGRAM BOT - SEND ALERTS v5.0
-# ============================================
-
-import requests
-from typing import List, Dict, Any
 import logging
 from datetime import datetime
-import pytz
+from typing import List
 
-import sys
-sys.path.append('..')
+import pytz
+import requests
+
 from config.settings import (
+    SCANNER_BUILD_ID,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    CHART_PATTERN_ALERT_HOUR,
-    CHART_PATTERN_ALERT_MINUTE,
-    CHART_PATTERN_FORCE_SCHEDULED_ONLY,
-    CHART_PATTERN_REALTIME,
-    SCANNER_BUILD_ID,
+    TELEGRAM_TOPIC_DEFAULT,
+    TELEGRAM_TOPIC_STARTUP,
+    TELEGRAM_TOPIC_STRONG_BUY,
 )
 
 logger = logging.getLogger(__name__)
-
-# Timezone
-WIB = pytz.timezone('Asia/Jakarta')
+WIB = pytz.timezone("Asia/Jakarta")
+TELEGRAM_MAX_CHARS = 3800
 
 
 def get_current_time_wib() -> str:
-    """Get current time in WIB format"""
-    now = datetime.now(WIB)
-    return now.strftime("%d %b %Y, %H:%M WIB")
+    return datetime.now(WIB).strftime("%d %b %Y, %H:%M WIB")
 
 
-def _chart_pattern_mode_line() -> str:
-    if CHART_PATTERN_REALTIME:
-        return "realtime tiap scan sesi"
-    slot = f"reviu terjadwal {CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d} WIB (1×/hari)"
-    if CHART_PATTERN_FORCE_SCHEDULED_ONLY:
-        return f"{slot} — tidak realtime"
-    return slot
-
-
-def send_telegram_message(message: str) -> bool:
-    """
-    Send message via Telegram Bot API
-    """
-    if TELEGRAM_BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or TELEGRAM_CHAT_ID == "YOUR_CHAT_ID_HERE":
-        logger.warning("Telegram not configured. Message would be:")
-        print("\n" + "="*50)
-        print(message)
-        print("="*50 + "\n")
+def send_telegram_message(message: str, thread_id: "int | None" = None) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        logger.warning("Telegram not configured. Message would be:\n%s", message)
         return True
-    
+
+    if thread_id is None:
+        thread_id = TELEGRAM_TOPIC_DEFAULT
+
+    payload = {
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message,
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
+    }
+    if thread_id is not None:
+        payload["message_thread_id"] = thread_id
+
     try:
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        payload = {
-            'chat_id': TELEGRAM_CHAT_ID,
-            'text': message,
-            'parse_mode': 'HTML',
-            'disable_web_page_preview': True
-        }
-        
         response = requests.post(url, json=payload, timeout=10)
-        
         if response.status_code == 200:
             logger.info("Telegram message sent successfully")
             return True
-        else:
-            logger.error(f"Telegram error: {response.status_code} - {response.text}")
-            return False
-            
-    except Exception as e:
-        logger.error(f"Error sending Telegram message: {str(e)}")
+        logger.error("Telegram error: %s - %s", response.status_code, response.text)
+        return False
+    except Exception as exc:
+        logger.error("Error sending Telegram message: %s", exc)
         return False
 
 
-def _format_tp_info(r) -> str:
-    """Format target price info (TP1, TP2, SL) for a stock"""
+def _format_tp_info(result) -> str:
     lines = []
-    if getattr(r, 'tp1', 0) > 0:
-        tp1_pct = ((r.tp1 - r.price) / r.price) * 100
-        lines.append(f"   🎯 TP1: {r.tp1:,.0f} (+{tp1_pct:.1f}%)")
-    
-    if getattr(r, 'tp2', 0) > 0:
-        tp2_pct = ((r.tp2 - r.price) / r.price) * 100
-        source = getattr(r, 'tp2_source', 'ATR')
-        src_label = "📋 resist" if source == "RESISTANCE" else "ATR"
-        lines.append(f"   🚀 TP2: {r.tp2:,.0f} (+{tp2_pct:.1f}%) {src_label}")
-    
-    # Tambah SL 5% dari harga terkini
-    sl_price = r.price * 0.95
-    lines.append(f"   🛑 SL: {sl_price:,.0f} (-5.0%)")
-    
+    if getattr(result, "tp1", 0) > 0:
+        tp1_pct = ((result.tp1 - result.price) / result.price) * 100
+        lines.append(f"   TP1: {result.tp1:,.0f} (+{tp1_pct:.1f}%)")
+    if getattr(result, "tp2", 0) > 0:
+        tp2_pct = ((result.tp2 - result.price) / result.price) * 100
+        source = getattr(result, "tp2_source", "ATR")
+        lines.append(f"   TP2: {result.tp2:,.0f} (+{tp2_pct:.1f}%) {source}")
+    if getattr(result, "price", 0) > 0:
+        lines.append(f"   SL: {result.price * 0.95:,.0f} (-5.0%)")
     return "\n".join(lines)
 
 
-TELEGRAM_MAX_CHARS = 3800  # Telegram hard limit 4096; leave buffer for HTML entities
-
-
-def format_strong_buy_message(
-    results: List,
-    *,
-    total_count: int | None = None,
-    part: int = 1,
-) -> str:
-    """Format Strong Buy (confirmed breakout) alert message"""
+def format_strong_buy_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-
-    title = "🚀 <b>STRONG BUY SIGNAL</b>"
+    title = "<b>STRONG BUY DAILY</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
-
     lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "--------------------------",
         title,
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
+        "--------------------------",
+        get_current_time_wib(),
+        "",
     ]
-    
-    for r in results:
-        ticker_clean = r.ticker.replace('.JK', '')
-        change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-        lines.append(f"🟢 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-        if getattr(r, "is_bullish_engulfing", False):
-            trigger = "ENGULF — candle bullish engulfing + volume"
-        elif getattr(r, "is_counter_trend", False):
-            trigger = "RS-BEAR — saham kuat saat IHSG lemah"
-        elif getattr(r, "is_supertrend_flip", False):
-            trigger = "ST-FLIP — supertrend baru balik bullish"
-        elif getattr(r, "is_st_continuation", False):
-            trigger = "ST-CONT — 2 bar di atas supertrend + volume"
-        else:
-            trigger = "?"
-        regime_tag = getattr(r, "market_regime", "") or ""
-        regime_suffix = f" | Mkt:{regime_tag}" if regime_tag and regime_tag != "UNKNOWN" else ""
+    for result in results:
+        ticker = result.ticker.replace(".JK", "")
+        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
+        regime = getattr(result, "market_regime", "UNKNOWN")
+        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
         lines.append(
-            f"   └─ Score: {r.score} | {trigger} | Vol: {r.volume_ratio:.1f}x{regime_suffix}"
+            f"   MOM-EXP | Score {result.score} | Vol {result.volume_ratio:.1f}x | "
+            f"Ret20 {getattr(result, 'return20_pct', 0.0):+.1f}% | Mkt {regime}"
         )
-        tp_info = _format_tp_info(r)
+        tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
         lines.append("")
-
-    lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     total = total_count if total_count is not None else len(results)
-    if total_count and len(results) < total_count:
-        lines.append(f"Tampil: {len(results)} dari {total} saham strong buy")
-    else:
-        lines.append(f"Total: {total} saham strong buy")
-    
+    lines.append(f"Total: {total} saham strong buy")
     return "\n".join(lines)
 
 
-def format_accumulation_message(
-    results: List,
-    *,
-    total_count: int | None = None,
-    part: int = 1,
-) -> str:
-    """Format accumulation signal message"""
+def format_early_entry_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-
-    title = "🔵 <b>ACCUMULATION SIGNAL</b>"
+    title = "<b>EARLY ENTRY DAILY (SEROK BAWAH)</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
-
     lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "--------------------------",
         title,
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
+        "--------------------------",
+        get_current_time_wib(),
+        "<i>Sinyal dini — tunggu konfirmasi, bukan auto-entry.</i>",
+        "",
     ]
-    
-    for r in results:
-        ticker_clean = r.ticker.replace('.JK', '')
-        change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-        lines.append(f"📊 <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-        lines.append(f"   └─ Score: {r.score} | OBV: {r.obv_status} | Vol: {r.volume_ratio:.1f}x")
-        tp_info = _format_tp_info(r)
+    for result in sorted(results, key=lambda x: x.early_entry_strength, reverse=True):
+        ticker = result.ticker.replace(".JK", "")
+        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
+        strength = getattr(result, "early_entry_strength", 0)
+        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
+        lines.append(
+            f"   Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
+            f"Strength {strength}/7 | Score {result.score}"
+        )
+        tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
         lines.append("")
-    
-    lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
     total = total_count if total_count is not None else len(results)
-    if total_count and len(results) < total_count:
-        lines.append(f"Tampil: {len(results)} dari {total} saham accumulation")
-    else:
-        lines.append(f"Total: {total} saham accumulation")
-    
+    lines.append(f"Total: {total} saham early entry")
     return "\n".join(lines)
 
 
-def format_early_entry_message(
-    results: List,
-    *,
-    total_count: int | None = None,
-    part: int = 1,
-) -> str:
-    """Format Early Entry (Serok Bawah) message"""
+def format_reversal_watch_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-
-    title = "🎯 <b>EARLY ENTRY (SEROK BAWAH)</b>"
+    title = "<b>REVERSAL WATCH DAILY</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
-
     lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "--------------------------",
         title,
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
+        "--------------------------",
+        get_current_time_wib(),
+        "<i>Watchlist risiko tinggi; tunggu follow-through, bukan auto-entry.</i>",
+        "",
     ]
-    
-    # Sort by strength (highest first)
-    sorted_results = sorted(results, key=lambda x: x.early_entry_strength, reverse=True)
-    
-    for r in sorted_results:
-        ticker_clean = r.ticker.replace('.JK', '')
-        change_str = f"+{r.change_percent:.1f}%" if r.change_percent >= 0 else f"{r.change_percent:.1f}%"
-        
-        # Strength indicator
-        strength = r.early_entry_strength
-        emoji = "🔥" if strength >= 5 else "💎" if strength >= 3 else "📍"
-        
-        lines.append(f"{emoji} <b>{ticker_clean}</b> | {r.price:,.0f} ({change_str})")
-        lines.append(f"   └─ Koreksi: {r.correction_percent:.1f}% | Strength: {strength}/7")
-        tp_info = _format_tp_info(r)
-        if tp_info:
-            lines.append(tp_info)
-        lines.append("")
-    
-    lines.append(f"━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append("⚠️ <i>Sinyal dini - DYOR!</i>")
-    total = total_count if total_count is not None else len(results)
-    if total_count and len(results) < total_count:
-        lines.append(f"Tampil: {len(results)} dari {total} saham early entry")
-    else:
-        lines.append(f"Total: {total} saham early entry")
-    
-    return "\n".join(lines)
-
-
-def format_chart_pattern_morning_message(
-    items: List[Dict[str, Any]],
-    test_mode: bool = False,
-    realtime: bool = False,
-) -> str:
-    """
-    Digest pola chart bullish (TF daily), selalu judul terjadwal (bukan realtime).
-    """
-    if not items:
-        return ""
-
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
-    for it in sorted(items, key=lambda x: (x["pattern_key"], x["ticker"])):
-        grouped.setdefault(it["pattern_key"], []).append(it)
-
-    badge = ""
-    if test_mode:
-        badge = (
-            "🧪 <b>MODE UJI TELEGRAM</b> • tidak menyentuh dedup / kuota sekali-scan harian •"
+    for result in sorted(results, key=lambda x: x.volume_ratio, reverse=True):
+        ticker = result.ticker.replace(".JK", "")
+        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
+        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
+        lines.append(
+            f"   Return 20 bar {getattr(result, 'return20_pct', 0.0):+.1f}% | "
+            f"RSI {getattr(result, 'rsi', 50.0):.1f} | Vol {result.volume_ratio:.1f}x"
         )
-
-    slot = f"{CHART_PATTERN_ALERT_HOUR:02d}:{CHART_PATTERN_ALERT_MINUTE:02d}"
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "📐 <b>CHART PATTERNS — REVIU HARIAN (TF-D)</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-    ]
-    if badge:
-        lines.extend([badge, ""])
-    lines.extend(
-        [
-            f"⏰ {get_current_time_wib()}",
-            f"<i>Slot terjadwal: {slot} WIB (1×/hari) • build {SCANNER_BUILD_ID}</i>",
-            "<i>Filter info: RSI(14) hanya dicantumkan per baris (bukan syarat).</i>",
-            "<i>Konfirmasi kualitas: naik ⇒ vol ≥ MA20 • turun/doji ⇒ vol ≤ MA20 • OBV &gt; EMA OBV.</i>",
-            "<i>Heuristik otomatis. Candle harian setelah tutup IDX (hari perdagangan yang sama).</i>",
-            "",
-        ]
-    )
-
-    for pkey in sorted(grouped.keys()):
-        rows = grouped[pkey]
-        label = rows[0].get("label", pkey)
-        lines.append(f"<b>{label}</b>")
-        for r in rows:
-            t = str(r["ticker"]).replace(".JK", "")
-            ch = r.get("change_pct", 0.0)
-            chs = f"+{ch:.1f}%" if ch >= 0 else f"{ch:.1f}%"
-            vm = r.get("vol_vs_avg", 1.0)
-            rsi = r.get("rsi14")
-            rsi_txt = f" • RSI14 {rsi:.1f}" if rsi is not None else ""
-            lines.append(
-                f"• <b>{t}</b> | {r['price']:,.0f} ({chs}) | Vol {vm:.2f}×{rsi_txt}"
-            )
         lines.append("")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"Total: {len(items)} baris pola (bisa 1 ticker → beberapa pola)")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham reversal watch")
     return "\n".join(lines)
-
-
-def send_chart_pattern_morning_digest(
-    items: List[Dict[str, Any]],
-    test_mode: bool = False,
-    realtime: bool = False,
-) -> bool:
-    msg = format_chart_pattern_morning_message(items, test_mode=test_mode, realtime=False)
-    if not msg:
-        if test_mode:
-            nm = (
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "📐 <b>CHART PATTERNS — UJI TELEGRAM (TF-D)</b>\n"
-                "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                "🧪 <i>Mode uji • tidak ada baris pola yang lolos filter.</i>\n"
-                f"⏰ {get_current_time_wib()}"
-            )
-            return send_telegram_message(nm)
-        return False
-    return send_telegram_message(msg)
 
 
 def _dedupe_results_by_ticker(results: List) -> List:
     seen = set()
-    out = []
-    for r in results:
-        t = getattr(r, "ticker", None)
-        if not t or t in seen:
+    output = []
+    for result in results:
+        ticker = getattr(result, "ticker", None)
+        if not ticker or ticker in seen:
             continue
-        seen.add(t)
-        out.append(r)
-    return out
+        seen.add(ticker)
+        output.append(result)
+    return output
 
 
 def _chunked_alert_messages(results: List, format_fn) -> List[str]:
-    """Split alert into multiple messages under TELEGRAM_MAX_CHARS."""
     results = _dedupe_results_by_ticker(results)
     if not results:
         return []
@@ -352,7 +179,6 @@ def _chunked_alert_messages(results: List, format_fn) -> List[str]:
     messages: List[str] = []
     idx = 0
     part = 1
-
     while idx < len(results):
         lo = idx
         hi = lo + 1
@@ -366,261 +192,47 @@ def _chunked_alert_messages(results: List, format_fn) -> List[str]:
             if hi == len(results):
                 break
             hi += 1
-
-        msg = format_fn(results[lo:hi], total_count=total, part=part)
-        messages.append(msg)
+        messages.append(format_fn(results[lo:hi], total_count=total, part=part))
         idx = hi
         part += 1
-
     return messages
 
 
-def send_chunked_alert(results: List, format_fn) -> int:
-    """Send one alert type, splitting into multiple Telegram messages if needed."""
+def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None) -> int:
     sent = 0
     for msg in _chunked_alert_messages(results, format_fn):
-        if send_telegram_message(msg):
+        if send_telegram_message(msg, thread_id=thread_id):
             sent += 1
     return sent
 
 
 def send_all_alerts(signals: dict) -> int:
-    """
-    Send all alert messages (v5)
-    Signal types: strong_buy, accumulation, early_entry
-    """
     messages_sent = 0
-    
-    if signals.get('strong_buy'):
-        messages_sent += send_chunked_alert(signals['strong_buy'], format_strong_buy_message)
-
-    if signals.get('early_entry'):
-        messages_sent += send_chunked_alert(signals['early_entry'], format_early_entry_message)
-    
+    if signals.get("strong_buy"):
+        messages_sent += send_chunked_alert(
+            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+        )
+    if signals.get("early_entry"):
+        messages_sent += send_chunked_alert(
+            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+        )
+    if signals.get("reversal_watch"):
+        messages_sent += send_chunked_alert(
+            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+        )
     return messages_sent
 
 
 def send_startup_message():
-    """Send startup notification"""
-    msg = f"""
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-🤖 <b>IHSG SCANNER v5.0 STARTED</b>
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏰ {get_current_time_wib()}
-🔖 Build: <code>{SCANNER_BUILD_ID}</code>
+    message = f"""
+--------------------------
+<b>QUANTPILOT DAILY STARTED</b>
+--------------------------
+{get_current_time_wib()}
+Build: <code>{SCANNER_BUILD_ID}</code>
 
-Scanner is now running.
-Scan interval: back-to-back (langsung setelah selesai)
-Trading hours: 08:30 - 16:00 WIB
-
-📊 Alerts:
-• 📐 Chart Patterns — {_chart_pattern_mode_line()}
-• 🚀 Strong Buy (confirmed breakout)
-• 🔵 Accumulation
-• 🎯 Early Entry (Serok Bawah)
-━━━━━━━━━━━━━━━━━━━━━━━━━━
+Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
+Alerts: Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
+--------------------------
 """
-    send_telegram_message(msg.strip())
-
-
-def send_scan_complete_message(total_stocks: int, signals_count: dict):
-    """Send scan completion summary (optional)"""
-    total_signals = sum(len(v) for v in signals_count.values())
-    
-    if total_signals == 0:
-        return  # Don't send if no signals
-
-
-def send_daily_recap_message(daily_summary: dict):
-    """
-    Send end-of-day recap message with ALL stocks that triggered signals today (v5).
-    """
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "📋 <b>REKAP HARIAN - END OF DAY (opsi BSJP)</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"📅 {daily_summary.get('date', 'N/A')}",
-        f"⏰ {get_current_time_wib()}",
-        ""
-    ]
-    
-    total_signals = 0
-    
-    # Strong Buy
-    strong = daily_summary.get('strong_buy', [])
-    if strong:
-        lines.append(f"🚀 <b>STRONG BUY</b> ({len(strong)} saham)")
-        tickers = [t.replace('.JK', '') for t in strong]
-        lines.append(f"   {', '.join(tickers)}")
-        lines.append("")
-        total_signals += len(strong)
-    
-    # Accumulation
-    acc = daily_summary.get('accumulation', [])
-    if acc:
-        lines.append(f"🔵 <b>ACCUMULATION</b> ({len(acc)} saham)")
-        tickers = [t.replace('.JK', '') for t in acc]
-        lines.append(f"   {', '.join(tickers)}")
-        lines.append("")
-        total_signals += len(acc)
-    
-    # Early Entry
-    early = daily_summary.get('early_entry', [])
-    if early:
-        lines.append(f"🎯 <b>EARLY ENTRY</b> ({len(early)} saham)")
-        tickers = [t.replace('.JK', '') for t in early]
-        lines.append(f"   {', '.join(tickers)}")
-        lines.append("")
-        total_signals += len(early)
-    
-    # Footer
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"📊 Total: {total_signals} sinyal hari ini")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    
-    message = "\n".join(lines)
-    send_telegram_message(message)
-
-
-def send_evaluation_message(outcome: dict):
-    """Evaluasi 16:30 — hanya logging, tidak kirim Telegram."""
-    tp1 = len(outcome.get('tp1_hit', []))
-    tp2 = len(outcome.get('tp2_hit', []))
-    sl  = len(outcome.get('sl_hit', []))
-    act = len(outcome.get('active', []))
-    logger.info(f"[Evaluation] TP1={tp1} TP2={tp2} SL={sl} active={act}")
-
-
-def send_active_signals_morning(active_signals: list):
-    """Kirim daftar sinyal yang masih valid setiap pagi (08:30)."""
-    if not active_signals:
-        return
-
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🌅 <b>SINYAL MASIH AKTIF HARI INI</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        "",
-    ]
-
-    for s in active_signals:
-        t = s['ticker'].replace('.JK', '')
-        entry = s['entry_price']
-        tp1   = s.get('tp1', 0)
-        sl    = s.get('sl', 0)
-        alert_date = s.get('alert_date', '')
-        lines.append(f"🟡 <b>{t}</b> | Entry: {entry:,.0f}")
-        lines.append(f"   🎯 TP1: {tp1:,.0f} | 🛑 SL: {sl:,.0f} | 📅 {alert_date}")
-        lines.append("")
-
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    lines.append(f"⏳ Total aktif: {len(active_signals)} sinyal")
-    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-    send_telegram_message("\n".join(lines))
-
-
-def send_morning_recap_message(signals: dict):
-    """
-    Digest radar saham (format lama "EVENING SCAN - 18:00").
-
-    Tidak dipanggil scheduler — sebelumnya salah terkirim saat opening recap 08:45.
-    Pertahankan untuk uji manual; untuk broadcast terjadwal, wire ke slot WIB terpisah.
-    Splits into multiple messages if content exceeds Telegram limit.
-    """
-    
-    # Build header
-    header = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "🌙 <b>EVENING SCAN - 18:00</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"⏰ {get_current_time_wib()}",
-        ""
-    ]
-    
-    # Collect all sections
-    sections = []
-    total_signals = 0
-    
-    # Strong Buy (highest priority)
-    strong_buy = signals.get('strong_buy', [])
-    if strong_buy:
-        section_lines = [f"🚀 <b>STRONG BUY</b> ({len(strong_buy)} saham)"]
-        for r in strong_buy:
-            ticker_clean = r.ticker.replace('.JK', '')
-            section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.tp1 and r.tp1 > 0:
-                sl_price = r.price * 0.95
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
-        section_lines.append("")
-        sections.append("\n".join(section_lines))
-        total_signals += len(strong_buy)
-    
-    # Accumulation
-    acc = signals.get('accumulation', [])
-    if acc:
-        section_lines = [f"🔵 <b>ACCUMULATION</b> ({len(acc)} saham)"]
-        for r in acc:
-            ticker_clean = r.ticker.replace('.JK', '')
-            section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Score: {r.score}")
-            if r.tp1 and r.tp1 > 0:
-                sl_price = r.price * 0.95
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
-        section_lines.append("")
-        sections.append("\n".join(section_lines))
-        total_signals += len(acc)
-    
-    # Bullish (good score)
-    bullish = signals.get('bullish', [])
-    if bullish:
-        section_lines = [f"📈 <b>BULLISH</b> ({len(bullish)} saham)"]
-        tickers = [r.ticker.replace('.JK', '') for r in bullish]
-        section_lines.append(", ".join(tickers))
-        section_lines.append("")
-        sections.append("\n".join(section_lines))
-        total_signals += len(bullish)
-    
-    # Early Entry
-    early = signals.get('early_entry', [])
-    if early:
-        section_lines = [f"🎯 <b>EARLY ENTRY</b> ({len(early)} saham)"]
-        for r in early:
-            ticker_clean = r.ticker.replace('.JK', '')
-            section_lines.append(f"• {ticker_clean} | {r.price:,.0f} | Koreksi: {r.correction_percent:.1f}%")
-            if r.tp1 and r.tp1 > 0:
-                sl_price = r.price * 0.95
-                section_lines.append(f"  🎯 TP1: {r.tp1:,.0f} | 🛑 SL: {sl_price:,.0f}")
-        section_lines.append("")
-        sections.append("\n".join(section_lines))
-        total_signals += len(early)
-    
-    # Footer
-    footer = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"📊 Total: {total_signals} saham dalam radar",
-        "💡 <i>Scan lengkap setelah market tutup</i>"
-    ]
-    
-    # Combine and split messages if needed (Telegram limit ~4096 chars)
-    MAX_LENGTH = 3800  # Leave some buffer
-    
-    current_message = "\n".join(header)
-    messages_to_send = []
-    
-    for section in sections:
-        # Check if adding this section exceeds limit
-        if len(current_message) + len(section) + 2 > MAX_LENGTH:
-            # Send current message and start new one
-            messages_to_send.append(current_message)
-            current_message = "━━━━━━━━━━━━━━━━━━━━━━━━━━\n🌙 <b>EVENING SCAN (lanjutan)</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n" + section
-        else:
-            current_message += "\n" + section
-    
-    # Add footer to last message
-    current_message += "\n".join(footer)
-    messages_to_send.append(current_message)
-    
-    # Send all messages
-    for msg in messages_to_send:
-        send_telegram_message(msg)
+    send_telegram_message(message.strip(), thread_id=TELEGRAM_TOPIC_STARTUP)

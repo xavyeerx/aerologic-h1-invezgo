@@ -13,6 +13,9 @@ logs/
 
 # Database (local state - will be recreated)
 database/*.json
+database/*.jsonl
+database/*.lock
+database/PAUSE_SCHEDULER
 
 # IDE
 .vscode/

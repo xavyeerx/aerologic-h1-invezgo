@@ -36,7 +36,7 @@ def is_arb_session(change_percent: float) -> bool:
 
 def apply_post_alert_arb_gate(result, df, state_manager: Optional["StateManager"]) -> None:
     """
-    Matikan strong_buy / accumulation / early_entry jika:
+    Matikan strong_buy / early_entry / reversal_watch jika:
     - call terakhir = sesi kemarin, hari ini ARB, atau masih dalam cooldown itu, dan
     - belum ada konfirmasi hijau (close > open).
     """
@@ -58,11 +58,11 @@ def apply_post_alert_arb_gate(result, df, state_manager: Optional["StateManager"
         logger.info(f"[ARB] {ticker}: konfirmasi hijau — cooldown dilepas")
         return
 
-    if result.is_strong_buy or result.is_accumulation or result.is_early_entry:
+    if result.is_strong_buy or result.is_early_entry or result.is_reversal_watch:
         logger.info(
             f"[ARB] {ticker}: sinyal diblokir (cooldown pasca-alert, "
             f"chg={chg:.1f}%, tunggu candle hijau)"
         )
     result.is_strong_buy = False
-    result.is_accumulation = False
     result.is_early_entry = False
+    result.is_reversal_watch = False

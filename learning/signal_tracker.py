@@ -3,7 +3,7 @@
 # ============================================================
 # Dipanggil dari main.py setelah send_all_alerts() berhasil.
 # Menyimpan setiap sinyal + seluruh konteks teknikalnya ke DB
-# sehingga outcome_checker.py bisa evaluate hasilnya nanti.
+# sehingga outcome engine bisa mengevaluasi hasilnya nanti.
 #
 # PRINSIP: Error di sini TIDAK BOLEH menghentikan bot.
 #          Semua exception ditangkap dan di-log saja.
@@ -49,8 +49,8 @@ _PREV_OUTCOME_SQL = """
 
 _SIGNAL_TYPE_MAP = {
     'strong_buy':   'STRONG_BUY',
-    'accumulation': 'ACCUMULATION',
-    'early_entry':  'EARLY_ENTRY',
+    'early_entry': 'EARLY_ENTRY',
+    'reversal_watch': 'REVERSAL_WATCH',
 }
 
 
@@ -193,17 +193,12 @@ def get_active_signal_tickers_by_type(lookback_days: int = 14) -> dict:
       - dan belum pernah hit TP1/TP2
 
     Return format:
-      {
-        'strong_buy': {'BBCA.JK', ...},
-        'accumulation': {...},
-        'early_entry': {...},
-        'bull_div': {...}
-      }
+      {'strong_buy': {'BBCA.JK', ...}, 'early_entry': {...}, 'reversal_watch': {...}}
     """
     active = {
         'strong_buy': set(),
-        'accumulation': set(),
         'early_entry': set(),
+        'reversal_watch': set(),
     }
 
     if not is_available():
