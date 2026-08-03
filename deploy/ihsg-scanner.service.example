@@ -7,15 +7,15 @@ StartLimitBurst=5
 
 [Service]
 Type=simple
-User=quantpilot
-Group=quantpilot
-WorkingDirectory=/home/quantpilot/app
-EnvironmentFile=/etc/quantpilot/quantpilot.env
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/quantpilotbot
+EnvironmentFile=/home/ubuntu/quantpilotbot/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 RuntimeDirectory=quantpilot
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock --no-fork --nonblock /run/quantpilot/scheduler.lock /home/quantpilot/venv/bin/python /home/quantpilot/app/scheduler.py
+ExecStart=/usr/bin/flock --no-fork --nonblock /run/quantpilot/scheduler.lock /home/ubuntu/quantpilotbot/venv/bin/python /home/ubuntu/quantpilotbot/scheduler.py
 Restart=on-failure
 RestartSec=15s
 KillMode=control-group
@@ -27,7 +27,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=read-only
 ProtectSystem=full
-ReadWritePaths=/home/quantpilot/app/database /home/quantpilot/app/logs
+ReadWritePaths=/home/ubuntu/quantpilotbot/database /home/ubuntu/quantpilotbot/logs
 RestrictSUIDSGID=true
 
 [Install]
