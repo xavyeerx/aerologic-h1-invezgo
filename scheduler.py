@@ -1,5 +1,5 @@
 # ============================================
-# SCHEDULER - QuantPilot Daily
+# SCHEDULER - aerologic Daily
 # ============================================
 # Jadwal harian (WIB, Senin-Jumat):
 #   Senin-Kamis: 09:01-12:00 dan 13:31-16:01 -> Scan tiap 5 menit
@@ -151,7 +151,7 @@ def main() -> None:
 
     ensure_single_scheduler_process()
     logger.info("=" * 50)
-    logger.info("QuantPilot Daily scheduler")
+    logger.info("aerologic Daily scheduler")
     logger.info("Build: %s", SCANNER_BUILD_ID)
     logger.info("Scan tiap 5 menit: Senin-Kamis 09:01-12:00 dan 13:31-16:01; Jumat 09:01-12:00 dan 14:01-16:01")
     logger.info("=" * 50)
@@ -199,7 +199,7 @@ def main() -> None:
 
         except KeyboardInterrupt:
             logger.info("Scheduler dihentikan.")
-            send_telegram_message("QuantPilot Daily scanner stopped")
+            send_telegram_message("aerologic Daily scanner stopped")
             break
         except Exception as exc:
             logger.error("Scheduler error tak terduga: %s", exc)

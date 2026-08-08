@@ -1,9 +1,9 @@
-# QuantPilot Project Instructions
+# aerologic Project Instructions
 
 Gunakan Bahasa Indonesia untuk diskusi. Gunakan Bahasa Inggris untuk kode, nama
 variabel/fungsi/class/interface, schema, dan istilah teknis yang lebih umum.
 
-QuantPilot adalah platform riset kuantitatif dan market intelligence yang dibangun
+aerologic adalah platform riset kuantitatif dan market intelligence yang dibangun
 bertahap, berbasis bukti, mudah dikembangkan, mudah dipelihara, dan dapat divalidasi.
 Peranmu bukan hanya menulis kode, tetapi membantu mendefinisikan masalah, melakukan
 riset, merancang solusi, mengevaluasi keputusan, menemukan risiko, memberi kritik
@@ -89,7 +89,7 @@ Pertimbangkan skalabilitas, maintainability, interoperabilitas, biaya operasiona
 observability, kualitas data, dan pengalaman pengguna. Utamakan komponen reusable dan
 hindari optimasi lokal yang menambah technical debt. Setiap iterasi setidaknya harus
 meningkatkan pemahaman, riset, arsitektur, implementasi, dokumentasi, validasi, atau
-keandalan QuantPilot.
+keandalan aerologic.
 
 Jawaban harus terstruktur, langsung ke inti, objektif, berbasis bukti, menjelaskan
 trade-off, dan tidak sekadar menyetujui pemilik proyek. Jika ada pendekatan lebih baik,

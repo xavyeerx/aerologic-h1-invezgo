@@ -1,26 +1,26 @@
-# Runbook Deployment QuantPilot ke VPS
+# Runbook Deployment aerologic ke VPS
 
 Target GitHub:
 
 ```text
-https://github.com/xavyeerx/quantpilotbot.git
+git@github.com:xavyeerx/aerologic.git
 ```
 
 Bot jalan sebagai service `systemd` dari user VPS default `ubuntu`, dengan folder aplikasi:
 
 ```text
-/home/ubuntu/quantpilotbot
+/home/ubuntu/aerologic
 ```
 
 Jadwal scanner diatur oleh `scheduler.py`: Senin-Kamis `09:01-12:00` dan `13:31-16:01`, Jumat `09:01-12:00` dan `14:01-16:01`, weekend libur.
 
 ## 1. Push dari Lokal ke GitHub
 
-Pastikan remote pakai HTTPS:
+Pastikan remote pakai SSH:
 
 ```bash
 git remote -v
-git remote set-url origin https://github.com/xavyeerx/quantpilotbot.git
+git remote set-url origin git@github.com:xavyeerx/aerologic.git
 ```
 
 Untuk push perubahan:
@@ -31,7 +31,7 @@ git diff --check
 git add .
 git status --short
 git diff --cached --stat
-git commit -m "Prepare QuantPilot VPS deployment"
+git commit -m "Prepare aerologic VPS deployment"
 git push -u origin main
 ```
 
@@ -61,19 +61,32 @@ Login ke VPS sebagai `ubuntu`, lalu jalankan:
 sudo apt update
 sudo apt install -y git python3 python3-venv python3-pip util-linux nano
 sudo timedatectl set-timezone Asia/Jakarta
+```
+
+Setup SSH key untuk akses GitHub dari VPS (lakukan sekali):
+
+```bash
+ssh-keygen -t ed25519 -C "ubuntu@vps" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub
+```
+
+Salin output pubkey di atas, lalu tambahkan ke GitHub → Settings → SSH and GPG keys → New SSH key. Setelah itu:
+
+```bash
+ssh -T git@github.com
 cd /home/ubuntu
-git clone https://github.com/xavyeerx/quantpilotbot.git quantpilotbot
-cd /home/ubuntu/quantpilotbot
+git clone git@github.com:xavyeerx/aerologic.git aerologic
+cd /home/ubuntu/aerologic
 python3 -m venv venv
 ./venv/bin/python -m pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
 mkdir -p database logs
 ```
 
-Kalau folder `quantpilotbot` sudah ada dan ingin ambil update terbaru:
+Kalau folder `aerologic` sudah ada dan ingin ambil update terbaru:
 
 ```bash
-cd /home/ubuntu/quantpilotbot
+cd /home/ubuntu/aerologic
 git pull --ff-only origin main
 ./venv/bin/pip install -r requirements.txt
 ```
@@ -83,7 +96,7 @@ git pull --ff-only origin main
 Buat `.env` langsung di folder app:
 
 ```bash
-cd /home/ubuntu/quantpilotbot
+cd /home/ubuntu/aerologic
 nano .env
 chmod 600 .env
 ```
@@ -107,7 +120,7 @@ TELEGRAM_TOPIC_STARTUP=replace_me
 ## 4. Test Sebelum Service
 
 ```bash
-cd /home/ubuntu/quantpilotbot
+cd /home/ubuntu/aerologic
 ./venv/bin/python -m compileall -q -f main.py scheduler.py config core database learning notifications scripts
 ./venv/bin/python -c "import main, scheduler; print('runtime imports: OK')"
 ./venv/bin/python -m unittest discover -s tests -v
@@ -115,21 +128,21 @@ cd /home/ubuntu/quantpilotbot
 
 ## 5. Pasang Systemd
 
-Service template sudah disiapkan untuk user `ubuntu` dan path `/home/ubuntu/quantpilotbot`.
+Service template sudah disiapkan untuk user `ubuntu` dan path `/home/ubuntu/aerologic`.
 
 ```bash
-sudo cp /home/ubuntu/quantpilotbot/deploy/ihsg-scanner.service.example /etc/systemd/system/quantpilot-scanner.service
-sudo systemd-analyze verify /etc/systemd/system/quantpilot-scanner.service
+sudo cp /home/ubuntu/aerologic/deploy/ihsg-scanner.service.example /etc/systemd/system/aerologic-scanner.service
+sudo systemd-analyze verify /etc/systemd/system/aerologic-scanner.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now quantpilot-scanner.service
-sudo systemctl status quantpilot-scanner.service --no-pager
+sudo systemctl enable --now aerologic-scanner.service
+sudo systemctl status aerologic-scanner.service --no-pager
 ```
 
 Cek log:
 
 ```bash
-sudo journalctl -u quantpilot-scanner.service -n 100 --no-pager
-sudo journalctl -u quantpilot-scanner.service -f
+sudo journalctl -u aerologic-scanner.service -n 100 --no-pager
+sudo journalctl -u aerologic-scanner.service -f
 ```
 
 ## 6. Update Production
@@ -137,23 +150,23 @@ sudo journalctl -u quantpilot-scanner.service -f
 Setelah push perubahan baru ke GitHub:
 
 ```bash
-sudo systemctl stop quantpilot-scanner.service
-cd /home/ubuntu/quantpilotbot
+sudo systemctl stop aerologic-scanner.service
+cd /home/ubuntu/aerologic
 git pull --ff-only origin main
 ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python -m compileall -q -f main.py scheduler.py config core database learning notifications scripts
 ./venv/bin/python -c "import main, scheduler; print('runtime imports: OK')"
-sudo systemctl start quantpilot-scanner.service
-sudo systemctl status quantpilot-scanner.service --no-pager
+sudo systemctl start aerologic-scanner.service
+sudo systemctl status aerologic-scanner.service --no-pager
 ```
 
 ## 7. Operasi Cepat
 
 ```bash
-sudo systemctl status quantpilot-scanner.service --no-pager
-sudo systemctl restart quantpilot-scanner.service
-sudo systemctl stop quantpilot-scanner.service
-sudo journalctl -u quantpilot-scanner.service -f
+sudo systemctl status aerologic-scanner.service --no-pager
+sudo systemctl restart aerologic-scanner.service
+sudo systemctl stop aerologic-scanner.service
+sudo journalctl -u aerologic-scanner.service -f
 pgrep -af scheduler.py
 ```
 

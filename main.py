@@ -85,7 +85,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         return {"skipped": True, "reason": "Outside trading hours"}
 
     logger.info("=" * 50)
-    logger.info("Starting QuantPilot Daily scan")
+    logger.info("Starting aerologic Daily scan")
     logger.info("=" * 50)
     scan_t0 = time.perf_counter()
     state_manager.reset_daily_if_new_day()
@@ -236,7 +236,7 @@ def main():
 
 
 def run_with_notification():
-    logger.info("QuantPilot Daily scanner starting with notification...")
+    logger.info("aerologic Daily scanner starting with notification...")
     send_startup_message()
     run_scan(StateManager(), force=True)
 

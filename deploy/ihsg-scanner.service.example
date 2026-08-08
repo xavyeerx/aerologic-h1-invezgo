@@ -1,5 +1,5 @@
 [Unit]
-Description=QuantPilot scheduled market scanner
+Description=aerologic scheduled market scanner
 Wants=network-online.target
 After=network-online.target
 StartLimitIntervalSec=300
@@ -9,13 +9,13 @@ StartLimitBurst=5
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/quantpilotbot
-EnvironmentFile=/home/ubuntu/quantpilotbot/.env
+WorkingDirectory=/home/ubuntu/aerologic
+EnvironmentFile=/home/ubuntu/aerologic/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-RuntimeDirectory=quantpilot
+RuntimeDirectory=aerologic
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock --no-fork --nonblock /run/quantpilot/scheduler.lock /home/ubuntu/quantpilotbot/venv/bin/python /home/ubuntu/quantpilotbot/scheduler.py
+ExecStart=/usr/bin/flock --no-fork --nonblock /run/aerologic/scheduler.lock /home/ubuntu/aerologic/venv/bin/python /home/ubuntu/aerologic/scheduler.py
 Restart=on-failure
 RestartSec=15s
 KillMode=control-group
@@ -27,7 +27,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=read-only
 ProtectSystem=full
-ReadWritePaths=/home/ubuntu/quantpilotbot/database /home/ubuntu/quantpilotbot/logs
+ReadWritePaths=/home/ubuntu/aerologic/database /home/ubuntu/aerologic/logs
 RestrictSUIDSGID=true
 
 [Install]

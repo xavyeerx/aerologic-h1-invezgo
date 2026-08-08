@@ -226,7 +226,7 @@ def send_all_alerts(signals: dict) -> int:
 def send_startup_message():
     message = f"""
 --------------------------
-<b>QUANTPILOT DAILY STARTED</b>
+<b>AEROLOGIC DAILY STARTED</b>
 --------------------------
 {get_current_time_wib()}
 Build: <code>{SCANNER_BUILD_ID}</code>

@@ -1,1 +1,1 @@
-"""Reproducible QuantPilot research and operations scripts."""
+"""Reproducible aerologic research and operations scripts."""
