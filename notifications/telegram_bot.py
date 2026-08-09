@@ -75,7 +75,7 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
         title += f" <i>(bagian {part})</i>"
     lines = [
         "--------------------------",
-        title,
+        "🚀" + title,
         "--------------------------",
         get_current_time_wib(),
         "",
@@ -86,8 +86,7 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
         regime = getattr(result, "market_regime", "UNKNOWN")
         lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
         lines.append(
-            f"   MOM-EXP | Score {result.score} | Vol {result.volume_ratio:.1f}x | "
-            f"Ret20 {getattr(result, 'return20_pct', 0.0):+.1f}% | Mkt {regime}"
+            f"   Score {result.score} | Vol {result.volume_ratio:.1f}x | Mkt {regime}"
         )
         tp_info = _format_tp_info(result)
         if tp_info:
@@ -106,7 +105,7 @@ def format_early_entry_message(results: List, *, total_count: int | None = None,
         title += f" <i>(bagian {part})</i>"
     lines = [
         "--------------------------",
-        title,
+        "🎯" + title,
         "--------------------------",
         get_current_time_wib(),
         "<i>Sinyal dini — tunggu konfirmasi, bukan auto-entry.</i>",
@@ -138,7 +137,7 @@ def format_reversal_watch_message(results: List, *, total_count: int | None = No
         title += f" <i>(bagian {part})</i>"
     lines = [
         "--------------------------",
-        title,
+        "👁️" + title,
         "--------------------------",
         get_current_time_wib(),
         "<i>Watchlist risiko tinggi; tunggu follow-through, bukan auto-entry.</i>",
