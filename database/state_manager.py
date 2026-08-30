@@ -4,7 +4,7 @@
 
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Dict, Optional, List
 import logging
 import threading
@@ -17,13 +17,58 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+ALERT_LOOKBACK_DAYS = 14
+ALERT_MAX_CALLS = 3
+ALERT_MAX_CONSECUTIVE_SESSIONS = 2
+ALERT_CATEGORIES = ("strong_buy", "early_entry", "reversal_watch")
+
+
+def _canonical_ticker(ticker: str) -> str:
+    ticker = str(ticker or "").strip().upper()
+    return ticker[:-3] if ticker.endswith(".JK") else ticker
+
+
+def _previous_weekday(day: date) -> date:
+    previous = day - timedelta(days=1)
+    while previous.weekday() >= 5:
+        previous -= timedelta(days=1)
+    return previous
+
+
+def evaluate_alert_frequency(call_dates: List[str], on_date: date) -> tuple[bool, str]:
+    """Evaluate ticker-level call limits using unique alert dates."""
+    parsed_dates = set()
+    for value in call_dates:
+        try:
+            parsed_dates.add(datetime.strptime(value, "%Y-%m-%d").date())
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid alert history date: %r", value)
+
+    window_start = on_date - timedelta(days=ALERT_LOOKBACK_DAYS - 1)
+    calls_in_window = sum(window_start <= alert_date <= on_date for alert_date in parsed_dates)
+    if calls_in_window >= ALERT_MAX_CALLS:
+        return False, f"sudah {calls_in_window}x dalam {ALERT_LOOKBACK_DAYS} hari"
+
+    previous_sessions = []
+    session = on_date
+    for _ in range(ALERT_MAX_CONSECUTIVE_SESSIONS):
+        session = _previous_weekday(session)
+        previous_sessions.append(session)
+    if all(session in parsed_dates for session in previous_sessions):
+        return False, f"sudah call {ALERT_MAX_CONSECUTIVE_SESSIONS} sesi bursa berturut-turut"
+
+    return True, ""
+
 
 class StateManager:
     """Manage persistent state for stocks"""
     
     def __init__(self, state_file: str = "database/stock_states.json"):
         self.state_file = state_file
-        self.daily_alerts_file = "database/daily_alerts.json"
+        database_dir = os.path.dirname(state_file) or "database"
+        self.daily_alerts_file = os.path.join(database_dir, "daily_alerts.json")
+        self.signal_events_file = os.path.join(database_dir, "signal_events.jsonl")
+        self.signal_tracker_file = os.path.join(database_dir, "signal_tracker.json")
         self.states = {}
         self.daily_alerts = {}
         self._daily_alerts_lock = threading.Lock()
@@ -128,102 +173,152 @@ class StateManager:
         self.save()
     
     # ============================================
-    # DAILY ALERT TRACKING
+    # DAILY ALERT TRACKING AND FREQUENCY GATE
     # ============================================
-    
+
     def _load_daily_alerts(self):
-        """Load daily alerts from file"""
+        """Load daily claims and durable ticker-level alert history."""
         try:
             if os.path.exists(self.daily_alerts_file):
-                with open(self.daily_alerts_file, 'r') as f:
+                with open(self.daily_alerts_file, "r", encoding="utf-8") as f:
                     self.daily_alerts = json.load(f)
-                
-                # Check if it's a new day - reset if so
-                today = datetime.now().strftime('%Y-%m-%d')
-                if self.daily_alerts.get('date') != today:
-                    self._reset_daily_alerts()
             else:
+                self.daily_alerts = {}
+
+            if "history" not in self.daily_alerts:
+                self.daily_alerts["history"] = self._bootstrap_alert_history()
+
+            today = datetime.now().strftime("%Y-%m-%d")
+            if self.daily_alerts.get("date") != today:
                 self._reset_daily_alerts()
-        except Exception as e:
-            logger.error(f"Error loading daily alerts: {str(e)}")
+            else:
+                self._save_daily_alerts()
+        except Exception as exc:
+            logger.error("Error loading daily alerts: %s", exc)
+            self.daily_alerts = {"history": {}}
             self._reset_daily_alerts()
-    
+
+    def _bootstrap_alert_history(self) -> dict:
+        """Migrate unique ticker/date calls from append-only events and legacy tracker."""
+        history: Dict[str, set] = {}
+        if os.path.exists(self.signal_events_file):
+            try:
+                with open(self.signal_events_file, "r", encoding="utf-8") as handle:
+                    for line in handle:
+                        if not line.strip():
+                            continue
+                        event = json.loads(line)
+                        if event.get("event_type") != "SIGNAL_CREATED":
+                            continue
+                        ticker = _canonical_ticker(event.get("ticker"))
+                        alert_date = str(event.get("occurred_at", ""))[:10]
+                        if ticker and alert_date:
+                            history.setdefault(ticker, set()).add(alert_date)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                logger.warning("Gagal bootstrap alert history dari event log: %s", exc)
+
+        if os.path.exists(self.signal_tracker_file):
+            try:
+                with open(self.signal_tracker_file, "r", encoding="utf-8") as handle:
+                    for signal in json.load(handle).values():
+                        ticker = _canonical_ticker(signal.get("ticker"))
+                        alert_date = signal.get("alert_date")
+                        if ticker and alert_date:
+                            history.setdefault(ticker, set()).add(alert_date)
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                logger.warning("Gagal bootstrap alert history dari legacy tracker: %s", exc)
+
+        return {ticker: sorted(dates) for ticker, dates in history.items()}
+
     def _reset_daily_alerts(self):
-        """Reset daily alerts for a new day"""
-        today = datetime.now().strftime('%Y-%m-%d')
+        """Reset daily claims while preserving cross-day call history."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        history = self.daily_alerts.get("history", {})
         self.daily_alerts = {
-            'date': today,
-            'strong_buy': [],
-            'early_entry': [],
-            'reversal_watch': [],
+            "date": today,
+            "strong_buy": [],
+            "early_entry": [],
+            "reversal_watch": [],
+            "history": history,
         }
         self._save_daily_alerts()
-        logger.info(f"Daily alerts reset for {today}")
-    
+        logger.info("Daily alerts reset for %s", today)
+
     def _save_daily_alerts(self):
-        """Save daily alerts to file"""
         try:
-            with open(self.daily_alerts_file, 'w') as f:
+            os.makedirs(os.path.dirname(self.daily_alerts_file) or ".", exist_ok=True)
+            with open(self.daily_alerts_file, "w", encoding="utf-8") as f:
                 json.dump(self.daily_alerts, f, indent=2)
-        except Exception as e:
-            logger.error(f"Error saving daily alerts: {str(e)}")
-    
+        except Exception as exc:
+            logger.error("Error saving daily alerts: %s", exc)
+
+    def _was_ticker_alerted_today(self, ticker: str) -> bool:
+        canonical = _canonical_ticker(ticker)
+        return any(
+            canonical in {_canonical_ticker(item) for item in self.daily_alerts.get(category, [])}
+            for category in ALERT_CATEGORIES
+        )
+
     def is_already_alerted(self, signal_type: str, ticker: str) -> bool:
-        """Check if stock was already alerted for this signal type today"""
-        # Make sure we're on the same day
-        today = datetime.now().strftime('%Y-%m-%d')
-        if self.daily_alerts.get('date') != today:
+        """Check globally across alert categories for the current date."""
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self.daily_alerts.get("date") != today:
             self._reset_daily_alerts()
-        
-        return ticker in self.daily_alerts.get(signal_type, [])
+        canonical = _canonical_ticker(ticker)
+        history_dates = self.daily_alerts.get("history", {}).get(canonical, [])
+        return self._was_ticker_alerted_today(ticker) or today in history_dates
+
+    def _claim_alert_unlocked(self, signal_type: str, ticker: str) -> bool:
+        if self.is_already_alerted(signal_type, ticker):
+            logger.info("[AlertGate] Skip %s: sudah di-alert hari ini", ticker)
+            return False
+
+        canonical = _canonical_ticker(ticker)
+        call_dates = self.daily_alerts.setdefault("history", {}).get(canonical, [])
+        allowed, reason = evaluate_alert_frequency(call_dates, datetime.now().date())
+        if not allowed:
+            logger.info("[AlertGate] Skip %s: %s", ticker, reason)
+            return False
+
+        if signal_type not in self.daily_alerts:
+            self.daily_alerts[signal_type] = []
+        self.daily_alerts[signal_type].append(ticker)
+        today = datetime.now().strftime("%Y-%m-%d")
+        self.daily_alerts["history"].setdefault(canonical, []).append(today)
+        self.daily_alerts["history"][canonical] = sorted(
+            set(self.daily_alerts["history"][canonical])
+        )
+        self._save_daily_alerts()
+        return True
 
     def try_claim_daily_alert(self, signal_type: str, ticker: str) -> bool:
-        """
-        Klaim slot alert harian (atomik). True = boleh kirim Telegram sekarang.
-        Mencegah dobel jika dua proses scheduler jalan bersamaan.
-        """
+        """Atomically claim a call after daily and rolling-frequency checks."""
         with self._daily_alerts_lock:
             if _HAS_FCNTL:
                 os.makedirs(os.path.dirname(self._alert_lock_file) or ".", exist_ok=True)
-                with open(self._alert_lock_file, "w") as lf:
-                    fcntl.flock(lf, fcntl.LOCK_EX)
+                with open(self._alert_lock_file, "w") as lock_file:
+                    fcntl.flock(lock_file, fcntl.LOCK_EX)
                     try:
                         self._load_daily_alerts()
-                        if self.is_already_alerted(signal_type, ticker):
-                            return False
-                        self.add_alerted_stock(signal_type, ticker)
-                        return True
+                        return self._claim_alert_unlocked(signal_type, ticker)
                     finally:
-                        fcntl.flock(lf, fcntl.LOCK_UN)
-            if self.is_already_alerted(signal_type, ticker):
-                return False
-            self.add_alerted_stock(signal_type, ticker)
-            return True
-    
-    def add_alerted_stock(self, signal_type: str, ticker: str):
-        """Mark stock as alerted for this signal type today"""
-        if signal_type not in self.daily_alerts:
-            self.daily_alerts[signal_type] = []
+                        fcntl.flock(lock_file, fcntl.LOCK_UN)
+            return self._claim_alert_unlocked(signal_type, ticker)
 
-        if ticker not in self.daily_alerts[signal_type]:
-            self.daily_alerts[signal_type].append(ticker)
-            self._save_daily_alerts()
+    def add_alerted_stock(self, signal_type: str, ticker: str):
+        """Backward-compatible entrypoint; applies the same safety gate."""
+        return self.try_claim_daily_alert(signal_type, ticker)
 
     def add_alerted_stocks(self, signal_type: str, tickers: List[str]):
-        """Mark multiple stocks as alerted"""
-        for ticker in tickers:
-            self.add_alerted_stock(signal_type, ticker)
-    
-    def get_daily_summary(self) -> dict:
-        """Get summary of all stocks alerted today per signal type"""
-        return self.daily_alerts.copy()
-    
-    def reset_daily_if_new_day(self):
-        """Check and reset if it's a new day"""
-        today = datetime.now().strftime('%Y-%m-%d')
-        if self.daily_alerts.get('date') != today:
-            self._reset_daily_alerts()
+        return [ticker for ticker in tickers if self.try_claim_daily_alert(signal_type, ticker)]
 
+    def get_daily_summary(self) -> dict:
+        return self.daily_alerts.copy()
+
+    def reset_daily_if_new_day(self):
+        today = datetime.now().strftime("%Y-%m-%d")
+        if self.daily_alerts.get("date") != today:
+            self._reset_daily_alerts()
     # ============================================
     # SIGNAL TRACKER - Track TP/SL outcomes
     # ============================================

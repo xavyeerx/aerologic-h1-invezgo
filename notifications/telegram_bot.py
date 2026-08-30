@@ -17,11 +17,31 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 WIB = pytz.timezone("Asia/Jakarta")
 TELEGRAM_MAX_CHARS = 3800
+ALERT_FOOTER = "Powered by Aeerologic"
 
 
 def get_current_time_wib() -> str:
     return datetime.now(WIB).strftime("%d %b %Y, %H:%M WIB")
 
+
+def _format_transaction_value(value: float) -> str:
+    """Format nilai transaksi rupiah secara ringkas untuk alert Telegram."""
+    value = float(value or 0.0)
+    for divisor, suffix in ((1_000_000_000_000, "T"), (1_000_000_000, "B"), (1_000_000, "M")):
+        if abs(value) >= divisor:
+            return f"{value / divisor:.1f}".replace(".", ",") + suffix
+    return f"{value:,.0f}".replace(",", ".")
+
+
+def _format_volume_and_value(result) -> str:
+    return (
+        f"Vol {result.volume_ratio:.1f}x | "
+        f"Val {_format_transaction_value(getattr(result, 'daily_turnover', 0.0))}"
+    )
+
+
+def _append_alert_footer(lines: List[str]) -> None:
+    lines.extend(["", ALERT_FOOTER])
 
 def send_telegram_message(message: str, thread_id: "int | None" = None) -> bool:
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -86,7 +106,7 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
         regime = getattr(result, "market_regime", "UNKNOWN")
         lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
         lines.append(
-            f"   Score {result.score} | Vol {result.volume_ratio:.1f}x | Mkt {regime}"
+            f"   Score {result.score} | {_format_volume_and_value(result)} | Mkt {regime}"
         )
         tp_info = _format_tp_info(result)
         if tp_info:
@@ -94,6 +114,7 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
         lines.append("")
     total = total_count if total_count is not None else len(results)
     lines.append(f"Total: {total} saham strong buy")
+    _append_alert_footer(lines)
     return "\n".join(lines)
 
 
@@ -120,12 +141,14 @@ def format_early_entry_message(results: List, *, total_count: int | None = None,
             f"   Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
             f"Strength {strength}/7 | Score {result.score}"
         )
+        lines.append(f"   {_format_volume_and_value(result)}")
         tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
         lines.append("")
     total = total_count if total_count is not None else len(results)
     lines.append(f"Total: {total} saham early entry")
+    _append_alert_footer(lines)
     return "\n".join(lines)
 
 
@@ -149,11 +172,12 @@ def format_reversal_watch_message(results: List, *, total_count: int | None = No
         lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
         lines.append(
             f"   Return 20 bar {getattr(result, 'return20_pct', 0.0):+.1f}% | "
-            f"RSI {getattr(result, 'rsi', 50.0):.1f} | Vol {result.volume_ratio:.1f}x"
+            f"RSI {getattr(result, 'rsi', 50.0):.1f} | {_format_volume_and_value(result)}"
         )
         lines.append("")
     total = total_count if total_count is not None else len(results)
     lines.append(f"Total: {total} saham reversal watch")
+    _append_alert_footer(lines)
     return "\n".join(lines)
 
 
