@@ -121,7 +121,7 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
 def format_bullish_break_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-    title = "<b>BULLISH BREAK SUPERTREND</b>"
+    title = "<b>BULLISH BREAK</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
     lines = ["--------------------------", title, "--------------------------", get_current_time_wib(), ""]
@@ -282,7 +282,7 @@ def send_startup_message():
 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
-Alerts: Bullish Break Supertrend, Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
+Alerts: Bullish Break, Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
 --------------------------
 """
     send_telegram_message(message.strip(), thread_id=TELEGRAM_TOPIC_STARTUP)
