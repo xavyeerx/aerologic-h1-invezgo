@@ -72,6 +72,7 @@ def is_trading_hours() -> bool:
 def _empty_summary() -> dict:
     return {
         "stocks_scanned": 0,
+        "bullish_breaks": 0,
         "strong_buys": 0,
         "early_entries": 0,
         "reversal_watches": 0,
@@ -100,9 +101,10 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         logger.info("Tidak ada kandidat lolos screener scan ini.")
         return _empty_summary()
 
-    already_alerted = set()
-    for category in ("strong_buy", "early_entry", "reversal_watch"):
-        already_alerted.update(state_manager.daily_alerts.get(category, []))
+    # Keep scanning tickers that received another signal earlier today: they may
+    # still cross Supertrend later. Only a delivered bullish-break alert can skip
+    # further breakout checks for that ticker on the same day.
+    already_alerted = set(state_manager.daily_alerts.get("bullish_break", []))
     if already_alerted:
         before = len(candidates)
         candidates = [ticker for ticker in candidates if ticker not in already_alerted]
@@ -149,7 +151,12 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     )
 
     all_signals = filter_signals(results)
-    new_signals = {"strong_buy": [], "early_entry": [], "reversal_watch": []}
+    new_signals = {
+        "bullish_break": [],
+        "strong_buy": [],
+        "early_entry": [],
+        "reversal_watch": [],
+    }
     for signal_type, signal_list in all_signals.items():
         claimed = []
         for result in signal_list:
@@ -210,6 +217,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
 
     summary = {
         "stocks_scanned": len(results),
+        "bullish_breaks": len(new_signals["bullish_break"]),
         "strong_buys": len(new_signals["strong_buy"]),
         "early_entries": len(new_signals["early_entry"]),
         "reversal_watches": len(new_signals["reversal_watch"]),

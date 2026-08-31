@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from notifications.telegram_bot import (
     _format_transaction_value,
+    format_bullish_break_message,
     format_early_entry_message,
     format_reversal_watch_message,
     format_strong_buy_message,
@@ -29,6 +30,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
     def test_all_alert_types_include_volume_value_and_footer(self):
         for formatter in (
             format_strong_buy_message,
+            format_bullish_break_message,
             format_early_entry_message,
             format_reversal_watch_message,
         ):

@@ -9,7 +9,7 @@ aerologic adalah scanner saham Indonesia berbasis data Daily untuk riset kuantit
 Alur produksi saat ini:
 
 1. Scheduler menjalankan scan setiap lima menit selama jendela operasional WIB.
-2. Invezgo Screener memilih maksimal 30 kandidat berdasarkan aktivitas volume dan rata-rata nilai transaksi 20 hari.
+2. Invezgo Screener memilih maksimal 50 kandidat berdasarkan aktivitas volume dan rata-rata nilai transaksi 20 hari.
 3. Kandidat dibagi ke lane `momentum` (maksimal 18), `constructive` (6), dan `reversal` (6).
 4. Bot mengambil OHLCV Daily dari Invezgo untuk setiap kandidat.
 5. Scanner menghitung indikator, market regime, target, volume ratio, dan nilai transaksi harian.

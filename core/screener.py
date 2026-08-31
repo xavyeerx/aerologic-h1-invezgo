@@ -14,9 +14,9 @@ from .market_session import expected_daily_volume_fraction
 logger = logging.getLogger(__name__)
 WIB = pytz.timezone("Asia/Jakarta")
 
-MAX_CANDIDATES = 30
+MAX_CANDIDATES = 50
 MIN_AVG_VALUE_20 = 5_000_000_000
-LANE_CAPS = {"momentum": 18, "constructive": 6, "reversal": 6}
+LANE_CAPS = {"momentum": 30, "constructive": 10, "reversal": 10}
 SCREEN_VOLUME_MIN_FACTOR = float(os.getenv("SCREEN_VOLUME_MIN_FACTOR", "0.005"))
 
 
@@ -85,7 +85,6 @@ def build_formula(win: ScreenWindow) -> str:
         f'volume > avg("volume",20) * {win.vol_factor}',
         f'avg("value",20) > {MIN_AVG_VALUE_20}',
         "change_pct > -8",
-        "change_pct < 15",
     ]
     return " && ".join(parts)
 

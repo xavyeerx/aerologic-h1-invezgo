@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 ALERT_LOOKBACK_DAYS = 14
 ALERT_MAX_CALLS = 3
 ALERT_MAX_CONSECUTIVE_SESSIONS = 2
-ALERT_CATEGORIES = ("strong_buy", "early_entry", "reversal_watch")
+ALERT_CATEGORIES = ("bullish_break", "strong_buy", "early_entry", "reversal_watch")
 
 
 def _canonical_ticker(ticker: str) -> str:
@@ -236,6 +236,7 @@ class StateManager:
         history = self.daily_alerts.get("history", {})
         self.daily_alerts = {
             "date": today,
+            "bullish_break": [],
             "strong_buy": [],
             "early_entry": [],
             "reversal_watch": [],
@@ -266,6 +267,11 @@ class StateManager:
             self._reset_daily_alerts()
         canonical = _canonical_ticker(ticker)
         history_dates = self.daily_alerts.get("history", {}).get(canonical, [])
+        if signal_type == "bullish_break":
+            return canonical in {
+                _canonical_ticker(item)
+                for item in self.daily_alerts.get("bullish_break", [])
+            }
         return self._was_ticker_alerted_today(ticker) or today in history_dates
 
     def _claim_alert_unlocked(self, signal_type: str, ticker: str) -> bool:

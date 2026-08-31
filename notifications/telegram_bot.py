@@ -118,6 +118,28 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
     return "\n".join(lines)
 
 
+def format_bullish_break_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
+    if not results:
+        return ""
+    title = "<b>BULLISH BREAK SUPERTREND</b>"
+    if part > 1:
+        title += f" <i>(bagian {part})</i>"
+    lines = ["--------------------------", title, "--------------------------", get_current_time_wib(), ""]
+    for result in results:
+        ticker = result.ticker.replace(".JK", "")
+        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
+        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
+        lines.append(
+            f"   Supertrend {getattr(result, 'supertrend_value', 0.0):,.0f} | "
+            f"{_format_volume_and_value(result)}"
+        )
+        lines.append("")
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham bullish break")
+    _append_alert_footer(lines)
+    return "\n".join(lines)
+
+
 def format_early_entry_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
@@ -231,6 +253,11 @@ def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None)
 
 def send_all_alerts(signals: dict) -> int:
     messages_sent = 0
+    if signals.get("bullish_break"):
+        messages_sent += send_chunked_alert(
+            signals["bullish_break"], format_bullish_break_message,
+            thread_id=TELEGRAM_TOPIC_STRONG_BUY,
+        )
     if signals.get("strong_buy"):
         messages_sent += send_chunked_alert(
             signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
@@ -255,7 +282,7 @@ def send_startup_message():
 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
-Alerts: Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
+Alerts: Bullish Break Supertrend, Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
 --------------------------
 """
     send_telegram_message(message.strip(), thread_id=TELEGRAM_TOPIC_STARTUP)

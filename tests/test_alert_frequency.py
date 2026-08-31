@@ -50,6 +50,13 @@ class AlertClaimIntegrationTests(unittest.TestCase):
             self.assertFalse(manager.try_claim_daily_alert("early_entry", "pack"))
             self.assertEqual(manager.daily_alerts["history"]["PACK"], [date.today().isoformat()])
 
+    def test_bullish_break_can_be_claimed_after_another_alert_but_only_once(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            manager = StateManager(str(Path(temp_dir) / "stock_states.json"))
+            self.assertTrue(manager.try_claim_daily_alert("strong_buy", "PACK.JK"))
+            self.assertTrue(manager.try_claim_daily_alert("bullish_break", "PACK.JK"))
+            self.assertFalse(manager.try_claim_daily_alert("bullish_break", "PACK.JK"))
+
     def test_legacy_event_log_bootstraps_history(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

@@ -93,7 +93,8 @@ def signal_snapshot(scan_result, signal_type: str, regime_info: dict) -> dict[st
     """Serialize point-in-time evidence needed for replay and audit."""
     fields: Iterable[str] = (
         "price", "change_percent", "score", "volume_ratio", "adx", "stoch_k",
-        "stoch_d", "supertrend_value", "is_supertrend_flip", "is_st_continuation",
+        "stoch_d", "supertrend_value", "is_supertrend_flip", "is_bullish_break",
+        "is_supertrend_bounce", "is_st_continuation",
         "is_counter_trend", "is_bullish_engulfing", "is_price_breakout", "atr_pct",
         "tp1", "tp2", "tp2_source", "support", "resistance",
     )

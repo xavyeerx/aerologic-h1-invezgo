@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
@@ -66,6 +67,9 @@ class ScanResult:
         self.is_bullish_engulfing = False
         self.is_counter_trend = False
         self.is_supertrend_flip = False
+        self.is_bullish_break = False
+        self.is_supertrend_bounce = False
+        self.supertrend_value = 0.0
         self.is_st_continuation = False
         self.bars_since_breakout = 0
         self.price_vs_supertrend_pct = 0.0
@@ -100,6 +104,74 @@ def _candle_features(latest: pd.Series) -> tuple[bool, float, float, float, floa
         body_fraction,
         upper_wick_fraction,
         lower_wick_fraction,
+    )
+
+
+def _idx_tick_size(price: float) -> float:
+    """Return the IDX price fraction applicable around ``price``."""
+    if price < 200:
+        return 1.0
+    if price < 500:
+        return 2.0
+    if price < 2_000:
+        return 5.0
+    if price < 5_000:
+        return 10.0
+    return 25.0
+
+
+def _next_idx_price_above(price: float) -> float:
+    """Return the first valid IDX price fraction strictly above an indicator line."""
+    tick = _idx_tick_size(price)
+    return (math.floor(price / tick) + 1) * tick
+
+
+def _is_bullish_supertrend_break(df: pd.DataFrame, current_price: float) -> bool:
+    """Detect the first move from below the bearish ST line to one tick above it."""
+    if len(df) < 2 or current_price <= 0:
+        return False
+    previous = df.iloc[-2]
+    latest = df.iloc[-1]
+    previous_close = float(previous.get("close", 0.0) or 0.0)
+    previous_line = float(previous.get("supertrend", 0.0) or 0.0)
+    break_line = float(
+        latest.get("st_upper_band", latest.get("supertrend", 0.0)) or 0.0
+    )
+    if previous_line <= 0 or break_line <= 0 or previous_close > previous_line:
+        return False
+    return current_price >= _next_idx_price_above(break_line)
+
+
+def _is_bullish_supertrend_bounce(df: pd.DataFrame, current_price: float) -> bool:
+    """Detect a one-tick reclaim after testing an established bullish ST line."""
+    if len(df) < 2 or current_price <= 0:
+        return False
+    previous = df.iloc[-2]
+    latest = df.iloc[-1]
+    if int(previous.get("direction", 0) or 0) != 1:
+        return False
+    if int(latest.get("direction", 0) or 0) != 1:
+        return False
+    bullish_line = float(
+        latest.get("st_lower_band", latest.get("supertrend", 0.0)) or 0.0
+    )
+    latest_low = float(latest.get("low", 0.0) or 0.0)
+    if bullish_line <= 0 or latest_low <= 0:
+        return False
+    trigger_price = _next_idx_price_above(bullish_line)
+    tested_line = latest_low <= trigger_price
+    reclaimed_one_tick = current_price >= trigger_price
+    return tested_line and reclaimed_one_tick
+
+
+def _is_strong_buy(
+    momentum_expansion: bool,
+    supertrend_bounce: bool,
+    change_percent: float,
+) -> bool:
+    return bool(
+        (momentum_expansion or supertrend_bounce)
+        and change_percent <= STRONG_BUY_MAX_CHANGE_PCT
     )
 
 
@@ -144,7 +216,9 @@ def analyze_stock(
             or latest.get("ema_bullish_alignment", False)
             or latest.get("price_above_ema50", False)
         )
-        result.is_supertrend_flip = bool(latest.get("bullish_break", False))
+        result.supertrend_value = float(
+            latest.get("st_upper_band", latest.get("supertrend", 0.0)) or 0.0
+        )
         result.price_vs_supertrend_pct = float(latest.get("price_vs_supertrend_pct", 0.0) or 0.0)
         result.volume_ratio = float(latest.get("volume_ratio", 0.0) or 0.0)
         result.stoch_k = float(latest.get("stoch_k", 50.0) or 50.0)
@@ -179,6 +253,10 @@ def analyze_stock(
                              ticker, float(latest.get("close", 0) or 0), result.price)
             if sp_change is not None:
                 result.change_percent = float(sp_change)
+
+        result.is_bullish_break = _is_bullish_supertrend_break(df, result.price)
+        result.is_supertrend_flip = result.is_bullish_break
+        result.is_supertrend_bounce = _is_bullish_supertrend_bounce(df, result.price)
 
         candle_close = result.price
         close20 = float(df["close"].iloc[-21]) if len(df) >= 21 else 0.0
@@ -217,9 +295,15 @@ def analyze_stock(
             max_rsi=REVERSAL_MAX_RSI,
             min_volume_ratio=REVERSAL_MIN_VOLUME_RATIO,
         )
-        result.is_strong_buy = result.is_momentum_expansion
+        result.is_strong_buy = _is_strong_buy(
+            result.is_momentum_expansion,
+            result.is_supertrend_bounce,
+            result.change_percent,
+        )
         result.signal_family = (
-            "MOMENTUM_EXPANSION"
+            "SUPERTREND_BOUNCE"
+            if result.is_supertrend_bounce
+            else "MOMENTUM_EXPANSION"
             if result.is_momentum_expansion
             else "SELLING_CLIMAX_REVERSAL"
             if result.is_reversal_watch
@@ -371,8 +455,17 @@ def scan_all_stocks(
 
 
 def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]]:
-    signals = {"strong_buy": [], "early_entry": [], "reversal_watch": []}
+    signals = {
+        "bullish_break": [],
+        "strong_buy": [],
+        "early_entry": [],
+        "reversal_watch": [],
+    }
     for result in results.values():
+        # A fresh Supertrend break is mandatory for every scanned ticker and is
+        # intentionally not gated by the liquidity filters of other signals.
+        if result.is_bullish_break:
+            signals["bullish_break"].append(result)
         if result.avg_turnover_5d < MIN_DAILY_TURNOVER:
             continue
         if result.is_strong_buy:
