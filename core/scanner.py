@@ -472,7 +472,7 @@ def filter_signals(results: Dict[str, ScanResult]) -> Dict[str, List[ScanResult]
             signals["strong_buy"].append(result)
         if result.is_early_entry:
             signals["early_entry"].append(result)
-        if result.is_reversal_watch:
+        if REVERSAL_WATCH_ALERT_ENABLED and result.is_reversal_watch:
             signals["reversal_watch"].append(result)
     return signals
 

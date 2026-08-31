@@ -282,7 +282,7 @@ def send_startup_message():
 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
-Alerts: Bullish Break, Strong Buy Daily, Early Entry Daily, Reversal Watch Daily.
+Alerts: Bullish Break, Strong Buy Daily, Early Entry Daily.
 --------------------------
 """
     send_telegram_message(message.strip(), thread_id=TELEGRAM_TOPIC_STARTUP)

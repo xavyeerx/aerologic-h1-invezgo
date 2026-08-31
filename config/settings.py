@@ -65,6 +65,9 @@ STRONG_BUY_MAX_CHANGE_PCT = float(os.getenv("STRONG_BUY_MAX_CHANGE_PCT", "10.0")
 REVERSAL_MAX_RETURN20 = float(os.getenv("REVERSAL_MAX_RETURN20", "-8.0"))
 REVERSAL_MAX_RSI = float(os.getenv("REVERSAL_MAX_RSI", "35"))
 REVERSAL_MIN_VOLUME_RATIO = float(os.getenv("REVERSAL_MIN_VOLUME_RATIO", "1.5"))
+REVERSAL_WATCH_ALERT_ENABLED = os.getenv(
+    "REVERSAL_WATCH_ALERT_ENABLED", "false"
+).strip().lower() in {"1", "true", "yes", "on"}
 
 # Risk and targets
 ARB_DROP_PCT_MIN = 13.0

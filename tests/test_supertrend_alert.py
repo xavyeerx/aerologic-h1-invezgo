@@ -104,6 +104,16 @@ class StrongBuyCapTests(unittest.TestCase):
     def test_bounce_above_ten_percent_is_also_rejected(self):
         self.assertFalse(_is_strong_buy(False, True, 10.01))
 
+    def test_reversal_watch_alert_is_disabled(self):
+        result = SimpleNamespace(
+            avg_turnover_5d=10_000_000_000,
+            is_bullish_break=False,
+            is_strong_buy=False,
+            is_early_entry=False,
+            is_reversal_watch=True,
+        )
+        self.assertEqual(filter_signals({"TEST": result})["reversal_watch"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
