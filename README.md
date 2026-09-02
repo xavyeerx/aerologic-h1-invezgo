@@ -119,15 +119,14 @@ Isi minimal pada `.env`:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=replace_me
+TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 
 Jika grup Telegram menggunakan Topics:
 
 ```dotenv
-TELEGRAM_TOPIC_DEFAULT=replace_me
-TELEGRAM_TOPIC_STRONG_BUY=replace_me
-TELEGRAM_TOPIC_STARTUP=replace_me
+TELEGRAM_SCANNER_TOPIC_ID=replace_me
 ```
 
 Secret tidak boleh ditulis langsung ke source code atau di-commit. `.env` sudah dikecualikan oleh `.gitignore`.

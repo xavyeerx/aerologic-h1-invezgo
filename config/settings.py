@@ -10,6 +10,7 @@ SCANNER_BUILD_ID = "20260723-daily-migration"
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TEST_CHAT_ID = os.getenv("TELEGRAM_TEST_CHAT_ID", "")
 
 
 def _env_int_or_none(name: str):
@@ -22,9 +23,7 @@ def _env_int_or_none(name: str):
         return None
 
 
-TELEGRAM_TOPIC_DEFAULT = _env_int_or_none("TELEGRAM_TOPIC_DEFAULT")
-TELEGRAM_TOPIC_STRONG_BUY = _env_int_or_none("TELEGRAM_TOPIC_STRONG_BUY")
-TELEGRAM_TOPIC_STARTUP = _env_int_or_none("TELEGRAM_TOPIC_STARTUP")
+TELEGRAM_SCANNER_TOPIC_ID = _env_int_or_none("TELEGRAM_SCANNER_TOPIC_ID")
 
 # Price and indicator settings
 BREAKOUT_LOOKBACK = 20

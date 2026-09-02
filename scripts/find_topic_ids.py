@@ -6,7 +6,7 @@ CARA PAKAI:
   1. Di grup Telegram (Topics aktif), kirim 1 pesan pendek di TIAP topik yang mau
      dipakai bot (mis. ketik "id" di topik Insight, IDX Info, Algobot, dst).
   2. Jalankan:  python scripts/find_topic_ids.py
-  3. Salin thread_id yang muncul ke .env (TELEGRAM_TOPIC_STRONG_BUY, dst).
+  3. Salin thread_id yang muncul ke TELEGRAM_SCANNER_TOPIC_ID di .env.
 
 Catatan: Telegram getUpdates hanya menyimpan update ~24 jam & akan kosong bila
 webhook aktif atau update sudah dikonsumsi. Kirim pesan tepat sebelum menjalankan.
@@ -72,8 +72,7 @@ def main() -> None:
         print(f"  {tid} : {name}")
     print("=" * 40)
     print("Salin thread_id yang relevan ke .env, contoh:")
-    print("  TELEGRAM_TOPIC_STRONG_BUY=<thread_id topik sinyal>")
-    print("  TELEGRAM_TOPIC_STARTUP=<thread_id topik startup/status>")
+    print("  TELEGRAM_SCANNER_TOPIC_ID=<thread_id topik scanner>")
 
 
 if __name__ == "__main__":

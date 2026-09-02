@@ -45,7 +45,7 @@ Proses eksekusi bot berjalan secara kronologis sebagai berikut:
    - Menggunakan `try_claim_daily_alert` pada *State Manager* untuk memastikan hanya sinyal *fresh* yang dieksekusi untuk dikirim.
 6. **Dispatch & Notification**:
    - Jika terdapat sinyal baru, fungsi `send_all_alerts(new_signals)` di modul Telegram akan dieksekusi.
-   - Hasil dikelompokkan ke dalam format *message* yang sesuai dengan kriteria (judul tebal, emoji penanda) lalu di-POST ke Telegram API menggunakan `message_thread_id` seperti `TELEGRAM_TOPIC_STRONG_BUY`.
+   - Hasil dikelompokkan ke dalam format *message* yang sesuai dengan kriteria (judul tebal, emoji penanda) lalu di-POST ke Telegram API menggunakan `TELEGRAM_SCANNER_TOPIC_ID`.
    - *State* terbaru disimpan kembali oleh *State Manager* ke dalam penyimpanan lokal agar tersinkronisasi.
 
 ## 4. Detail Modul Telegram Bot
@@ -62,10 +62,9 @@ Modul `notifications/telegram_bot.py` memiliki mekanisme internal yang adaptif u
 
 Bot ini mengandalkan beberapa variabel terpusat dari modul `config/settings.py` (yang nilainya ditarik dari berkas `.env` atau variabel sistem operasi):
 - `TELEGRAM_BOT_TOKEN`: *Access token* unik dari BotFather.
-- `TELEGRAM_CHAT_ID`: Kode numerik negatif yang merepresentasikan Supergroup/Channel tujuan.
-- `TELEGRAM_TOPIC_DEFAULT`: (Opsional) ID topik *fallback* atau utama.
-- `TELEGRAM_TOPIC_STARTUP`: ID topik tempat bot melakukan salam sapa rutin ketika dideploy.
-- `TELEGRAM_TOPIC_STRONG_BUY`: ID topik khusus yang difokuskan untuk peringatan *trading daily signal*.
+- `TELEGRAM_CHAT_ID`: Supergroup tujuan alert scanner.
+- `TELEGRAM_SCANNER_TOPIC_ID`: ID topik tunggal untuk seluruh alert scanner.
+- `TELEGRAM_TEST_CHAT_ID`: Grup terpisah untuk pengujian serta notifikasi startup/restart tanpa topic.
 
 ## Kesimpulan
 

@@ -32,9 +32,8 @@ py main.py
 ```env
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
-TELEGRAM_TOPIC_DEFAULT=98
-TELEGRAM_TOPIC_STRONG_BUY=98
-TELEGRAM_TOPIC_STARTUP=98
+TELEGRAM_TEST_CHAT_ID=
+TELEGRAM_SCANNER_TOPIC_ID=4
 ```
 
 Untuk mencari `message_thread_id`, kirim satu pesan di topic tujuan lalu jalankan:

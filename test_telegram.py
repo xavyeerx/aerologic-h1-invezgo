@@ -2,10 +2,10 @@
 import requests
 import sys
 sys.path.insert(0, '.')
-from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+from config.settings import TELEGRAM_BOT_TOKEN, TELEGRAM_TEST_CHAT_ID
 
 BOT_TOKEN = TELEGRAM_BOT_TOKEN
-CHAT_ID = TELEGRAM_CHAT_ID
+CHAT_ID = TELEGRAM_TEST_CHAT_ID
 
 message = """🧪 TEST MESSAGE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━

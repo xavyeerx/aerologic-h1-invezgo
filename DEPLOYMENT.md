@@ -106,15 +106,14 @@ Isi minimal:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=replace_me
+TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 
 Kalau pakai Telegram Topics, tambahkan:
 
 ```dotenv
-TELEGRAM_TOPIC_DEFAULT=replace_me
-TELEGRAM_TOPIC_STRONG_BUY=replace_me
-TELEGRAM_TOPIC_STARTUP=replace_me
+TELEGRAM_SCANNER_TOPIC_ID=replace_me
 ```
 
 ## 4. Test Sebelum Service

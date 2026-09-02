@@ -9,9 +9,8 @@ from config.settings import (
     SCANNER_BUILD_ID,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    TELEGRAM_TOPIC_DEFAULT,
-    TELEGRAM_TOPIC_STARTUP,
-    TELEGRAM_TOPIC_STRONG_BUY,
+    TELEGRAM_TEST_CHAT_ID,
+    TELEGRAM_SCANNER_TOPIC_ID,
 )
 
 logger = logging.getLogger(__name__)
@@ -43,16 +42,23 @@ def _format_volume_and_value(result) -> str:
 def _append_alert_footer(lines: List[str]) -> None:
     lines.extend(["", ALERT_FOOTER])
 
-def send_telegram_message(message: str, thread_id: "int | None" = None) -> bool:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+def send_telegram_message(
+    message: str,
+    thread_id: "int | None" = None,
+    *,
+    chat_id: "str | None" = None,
+    use_default_thread: bool = True,
+) -> bool:
+    destination_chat_id = chat_id or TELEGRAM_CHAT_ID
+    if not TELEGRAM_BOT_TOKEN or not destination_chat_id:
         logger.warning("Telegram not configured. Message would be:\n%s", message)
         return True
 
-    if thread_id is None:
-        thread_id = TELEGRAM_TOPIC_DEFAULT
+    if thread_id is None and use_default_thread:
+        thread_id = TELEGRAM_SCANNER_TOPIC_ID
 
     payload = {
-        "chat_id": TELEGRAM_CHAT_ID,
+        "chat_id": destination_chat_id,
         "text": message,
         "parse_mode": "HTML",
         "disable_web_page_preview": True,
@@ -291,24 +297,27 @@ def send_all_alerts(signals: dict) -> int:
     if signals.get("bullish_break"):
         messages_sent += send_chunked_alert(
             signals["bullish_break"], format_bullish_break_message,
-            thread_id=TELEGRAM_TOPIC_STRONG_BUY,
+            thread_id=TELEGRAM_SCANNER_TOPIC_ID,
         )
     if signals.get("strong_buy"):
         messages_sent += send_chunked_alert(
-            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
         )
     if signals.get("early_entry"):
         messages_sent += send_chunked_alert(
-            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
         )
     if signals.get("reversal_watch"):
         messages_sent += send_chunked_alert(
-            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_TOPIC_STRONG_BUY
+            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
         )
     return messages_sent
 
 
 def send_startup_message():
+    if not TELEGRAM_TEST_CHAT_ID:
+        logger.warning("TELEGRAM_TEST_CHAT_ID belum dikonfigurasi; notifikasi startup tidak dikirim")
+        return
     message = f"""
 --------------------------
 <b>AEROLOGIC DAILY STARTED</b>
@@ -320,4 +329,8 @@ Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:
 Alerts: Bullish Break, Strong Buy Daily, Early Entry Daily.
 --------------------------
 """
-    send_telegram_message(message.strip(), thread_id=TELEGRAM_TOPIC_STARTUP)
+    send_telegram_message(
+        message.strip(),
+        chat_id=TELEGRAM_TEST_CHAT_ID,
+        use_default_thread=False,
+    )
