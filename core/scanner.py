@@ -70,6 +70,7 @@ class ScanResult:
         self.is_bullish_break = False
         self.is_supertrend_bounce = False
         self.supertrend_value = 0.0
+        self.supertrend_support = 0.0
         self.is_st_continuation = False
         self.bars_since_breakout = 0
         self.price_vs_supertrend_pct = 0.0
@@ -218,6 +219,9 @@ def analyze_stock(
         )
         result.supertrend_value = float(
             latest.get("st_upper_band", latest.get("supertrend", 0.0)) or 0.0
+        )
+        result.supertrend_support = float(
+            latest.get("st_lower_band", latest.get("supertrend", 0.0)) or 0.0
         )
         result.price_vs_supertrend_pct = float(latest.get("price_vs_supertrend_pct", 0.0) or 0.0)
         result.volume_ratio = float(latest.get("volume_ratio", 0.0) or 0.0)

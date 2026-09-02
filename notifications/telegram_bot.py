@@ -17,7 +17,7 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 WIB = pytz.timezone("Asia/Jakarta")
 TELEGRAM_MAX_CHARS = 3800
-ALERT_FOOTER = "Powered by Aeerologic"
+ALERT_FOOTER = "Powered by Aerologic"
 
 
 def get_current_time_wib() -> str:
@@ -73,105 +73,27 @@ def send_telegram_message(message: str, thread_id: "int | None" = None) -> bool:
         return False
 
 
-def _format_tp_info(result) -> str:
+def _format_tp_info(result, *, spaced_labels: bool = False) -> str:
     lines = []
+    tp1_label = "TP 1" if spaced_labels else "TP1"
+    tp2_label = "TP 2" if spaced_labels else "TP2"
     if getattr(result, "tp1", 0) > 0:
         tp1_pct = ((result.tp1 - result.price) / result.price) * 100
-        lines.append(f"   TP1: {result.tp1:,.0f} (+{tp1_pct:.1f}%)")
+        lines.append(f"{tp1_label}: {result.tp1:,.0f} (+{tp1_pct:.1f}%)")
     if getattr(result, "tp2", 0) > 0:
         tp2_pct = ((result.tp2 - result.price) / result.price) * 100
         source = getattr(result, "tp2_source", "ATR")
-        lines.append(f"   TP2: {result.tp2:,.0f} (+{tp2_pct:.1f}%) {source}")
-    if getattr(result, "price", 0) > 0:
-        lines.append(f"   SL: {result.price * 0.95:,.0f} (-5.0%)")
+        lines.append(f"{tp2_label}: {result.tp2:,.0f} (+{tp2_pct:.1f}%) {source}")
     return "\n".join(lines)
 
 
-def format_strong_buy_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
-    if not results:
-        return ""
-    title = "<b>STRONG BUY DAILY</b>"
-    if part > 1:
-        title += f" <i>(bagian {part})</i>"
-    lines = [
-        "--------------------------",
-        "🚀" + title,
-        "--------------------------",
-        get_current_time_wib(),
-        "",
-    ]
-    for result in results:
-        ticker = result.ticker.replace(".JK", "")
-        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
-        regime = getattr(result, "market_regime", "UNKNOWN")
-        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
-        lines.append(
-            f"   Score {result.score} | {_format_volume_and_value(result)} | Mkt {regime}"
-        )
-        tp_info = _format_tp_info(result)
-        if tp_info:
-            lines.append(tp_info)
-        lines.append("")
-    total = total_count if total_count is not None else len(results)
-    lines.append(f"Total: {total} saham strong buy")
-    _append_alert_footer(lines)
-    return "\n".join(lines)
+def _format_market_regime(result) -> str:
+    regime = str(getattr(result, "market_regime", "UNKNOWN") or "UNKNOWN").upper()
+    return {"BULL": "BULLISH", "BEAR": "BEARISH"}.get(regime, regime)
 
 
-def format_bullish_break_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
-    if not results:
-        return ""
-    title = "<b>BULLISH BREAK</b>"
-    if part > 1:
-        title += f" <i>(bagian {part})</i>"
-    lines = ["--------------------------", title, "--------------------------", get_current_time_wib(), ""]
-    for result in results:
-        ticker = result.ticker.replace(".JK", "")
-        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
-        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
-        lines.append(
-            f"   Supertrend {getattr(result, 'supertrend_value', 0.0):,.0f} | "
-            f"{_format_volume_and_value(result)}"
-        )
-        lines.append("")
-    total = total_count if total_count is not None else len(results)
-    lines.append(f"Total: {total} saham bullish break")
-    _append_alert_footer(lines)
-    return "\n".join(lines)
-
-
-def format_early_entry_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
-    if not results:
-        return ""
-    title = "<b>EARLY ENTRY DAILY (SEROK BAWAH)</b>"
-    if part > 1:
-        title += f" <i>(bagian {part})</i>"
-    lines = [
-        "--------------------------",
-        "🎯" + title,
-        "--------------------------",
-        get_current_time_wib(),
-        "<i>Sinyal dini — tunggu konfirmasi, bukan auto-entry.</i>",
-        "",
-    ]
-    for result in sorted(results, key=lambda x: x.early_entry_strength, reverse=True):
-        ticker = result.ticker.replace(".JK", "")
-        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
-        strength = getattr(result, "early_entry_strength", 0)
-        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
-        lines.append(
-            f"   Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
-            f"Strength {strength}/7 | Score {result.score}"
-        )
-        lines.append(f"   {_format_volume_and_value(result)}")
-        tp_info = _format_tp_info(result)
-        if tp_info:
-            lines.append(tp_info)
-        lines.append("")
-    total = total_count if total_count is not None else len(results)
-    lines.append(f"Total: {total} saham early entry")
-    _append_alert_footer(lines)
-    return "\n".join(lines)
+def _format_supertrend_support(result) -> float:
+    return float(getattr(result, "supertrend_support", 0.0) or 0.0)
 
 
 def format_reversal_watch_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
@@ -199,6 +121,119 @@ def format_reversal_watch_message(results: List, *, total_count: int | None = No
         lines.append("")
     total = total_count if total_count is not None else len(results)
     lines.append(f"Total: {total} saham reversal watch")
+    _append_alert_footer(lines)
+    return "\n".join(lines)
+
+
+def _format_title(title: str, part: int) -> str:
+    formatted = f"<b>{title}</b>"
+    if part > 1:
+        formatted += f" <i>(bagian {part})</i>"
+    return formatted
+
+
+def _format_stock_header(result) -> str:
+    ticker = result.ticker.replace(".JK", "")
+    change = f"{result.change_percent:+.1f}%"
+    return f"<b>{ticker} | {result.price:,.0f} ({change})</b>"
+
+
+def format_bullish_break_message(
+    results: List, *, total_count: int | None = None, part: int = 1
+) -> str:
+    if not results:
+        return ""
+    lines = [
+        _format_title("🔥 BULLISH BREAKOUT", part),
+        "--------------------------",
+        get_current_time_wib(),
+        "",
+    ]
+    for result in results:
+        resistance = float(getattr(result, "supertrend_value", 0.0) or 0.0)
+        lines.append(_format_stock_header(result))
+        lines.append(f"Resistance {resistance:,.0f} | {_format_volume_and_value(result)}")
+        lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        tp_info = _format_tp_info(result, spaced_labels=True)
+        if tp_info:
+            lines.append(tp_info)
+        if resistance > 0:
+            lines.append(f"RBS: {resistance:,.0f}")
+            lines.extend([
+                "",
+                "Pantau area RBS (resistance become support), pastikan closing di atas harga tersebut agar bukan false breakout.",
+            ])
+        lines.append("")
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham bullish breakout")
+    _append_alert_footer(lines)
+    return "\n".join(lines)
+
+
+def format_strong_buy_message(
+    results: List, *, total_count: int | None = None, part: int = 1
+) -> str:
+    if not results:
+        return ""
+    lines = [
+        _format_title("🚀 STRONG BUY DAILY", part),
+        "--------------------------",
+        get_current_time_wib(),
+        "",
+    ]
+    for result in results:
+        lines.append(_format_stock_header(result))
+        lines.append(f"Score {result.score} | {_format_volume_and_value(result)}")
+        lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        tp_info = _format_tp_info(result)
+        if tp_info:
+            lines.append(tp_info)
+        support = _format_supertrend_support(result)
+        if support > 0:
+            lines.append(f"Support: {support:,.0f}")
+            lines.extend([
+                "",
+                f"Pastikan area Support ({support:,.0f}) dijaga agar momentum masih bullish.",
+            ])
+        lines.append("")
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham strong buy")
+    _append_alert_footer(lines)
+    return "\n".join(lines)
+
+
+def format_early_entry_message(
+    results: List, *, total_count: int | None = None, part: int = 1
+) -> str:
+    if not results:
+        return ""
+    lines = [
+        _format_title("🎯 EARLY ENTRY DAILY (SEROK BAWAH)", part),
+        "--------------------------",
+        get_current_time_wib(),
+        "<i>Sinyal dini — tunggu konfirmasi, bukan auto-entry.</i>",
+        "",
+    ]
+    for result in sorted(results, key=lambda item: item.early_entry_strength, reverse=True):
+        lines.append(_format_stock_header(result))
+        lines.append(
+            f"Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
+            f"{_format_volume_and_value(result)}"
+        )
+        lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        tp_info = _format_tp_info(result)
+        if tp_info:
+            lines.append(tp_info)
+        support = _format_supertrend_support(result)
+        if support > 0:
+            lines.append(f"Support: {support:,.0f}")
+            lines.extend([
+                "",
+                f"Pastikan area Support ({support:,.0f}) dijaga agar momentum masih bullish.",
+            ])
+        lines.append("")
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham early entry")
     _append_alert_footer(lines)
     return "\n".join(lines)
 
