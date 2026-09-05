@@ -1,4 +1,5 @@
 import logging
+from html import escape
 from datetime import datetime
 from typing import List
 
@@ -16,7 +17,7 @@ from config.settings import (
 logger = logging.getLogger(__name__)
 WIB = pytz.timezone("Asia/Jakarta")
 TELEGRAM_MAX_CHARS = 3800
-ALERT_FOOTER = "Powered by Aerologic"
+ALERT_FOOTER = "<i>Powered by Aerologic</i>"
 
 
 def get_current_time_wib() -> str:
@@ -176,6 +177,11 @@ def format_strong_buy_message(results: List, *, total_count: int | None = None, 
     return "\n".join(lines)
 
 
+def _format_sector(result) -> str:
+    sector = str(getattr(result, "sector", "UNKNOWN") or "UNKNOWN").strip()
+    return escape(sector or "UNKNOWN")
+
+
 def _format_supertrend_support(result) -> float:
     return float(getattr(result, "supertrend_support", 0.0) or 0.0)
 
@@ -238,6 +244,7 @@ def format_bullish_break_message(
         lines.append(_format_stock_header(result))
         lines.append(f"Resistance {resistance:,.0f} | {_format_volume_and_value(result)}")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        lines.append(f"Sector: {_format_sector(result)}")
         tp_info = _format_tp_info(result, spaced_labels=True)
         if tp_info:
             lines.append(tp_info)
@@ -269,6 +276,7 @@ def format_strong_buy_message(
         lines.append(_format_stock_header(result))
         lines.append(f"Score {result.score} | {_format_volume_and_value(result)}")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        lines.append(f"Sector: {_format_sector(result)}")
         tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
@@ -305,6 +313,7 @@ def format_early_entry_message(
             f"{_format_volume_and_value(result)}"
         )
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
+        lines.append(f"Sector: {_format_sector(result)}")
         tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
@@ -405,7 +414,7 @@ def send_startup_message():
 Build: <code>{SCANNER_BUILD_ID}</code>
 
 Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
-Alerts: Bullish Break, Strong Buy Daily, Early Entry Daily.
+Alerts: Bullish Breakout, Strong Buy Daily, Early Entry Daily.
 --------------------------
 """
     send_telegram_message(

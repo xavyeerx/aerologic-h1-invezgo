@@ -133,6 +133,18 @@ Secret tidak boleh ditulis langsung ke source code atau di-commit. `.env` sudah 
 
 ## Menjalankan Bot
 
+Preview seluruh contoh alert tanpa mengirim ke Telegram:
+
+```powershell
+python scripts/test_alerts.py
+```
+
+Kirim seluruh contoh alert hanya ke `TELEGRAM_TEST_CHAT_ID`:
+
+```powershell
+python scripts/test_alerts.py --send
+```
+
 Menjalankan scheduler produksi lokal:
 
 ```powershell

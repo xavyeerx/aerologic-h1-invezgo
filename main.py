@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from config.settings import *
 from core.data_fetcher import fetch_multiple_stocks
-from core.data_provider import InvezgoError
+from core.data_provider import InvezgoError, fetch_stock_sector
 from core.market_session import is_scan_session
 from core.scanner import filter_signals, has_any_signal, scan_all_stocks
 from core.screener import get_candidates
@@ -167,6 +167,10 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
             logger.info("%s: %d total, %d claimed", signal_type, len(signal_list), len(claimed))
 
     if has_any_signal(new_signals):
+        for signal_list in new_signals.values():
+            for result in signal_list:
+                result.sector = fetch_stock_sector(result.ticker)
+
         for signal_type, signal_list in new_signals.items():
             for result in signal_list:
                 result.signal_id = result.signal_id or new_signal_id()

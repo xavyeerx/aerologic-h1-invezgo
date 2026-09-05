@@ -55,6 +55,7 @@ class ScanResult:
         self.avg_turnover_5d = 0.0
         self.return20_pct = 0.0
         self.market_regime = "UNKNOWN"
+        self.sector = "UNKNOWN"
         self.adx = 0.0
         self.macd_status = ""
         self.obv_status = ""

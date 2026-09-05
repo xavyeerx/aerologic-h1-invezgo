@@ -19,6 +19,7 @@ import time
 import logging
 import threading
 from datetime import datetime, time as dtime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
 
@@ -216,6 +217,31 @@ def run_screener(formula: str) -> list[dict]:
     return payload
 
 
+@lru_cache(maxsize=256)
+def fetch_stock_sector(code: str) -> str:
+    """Return the IDX sector for a stock code, with a per-process cache."""
+    normalized_code = str(code or "").replace(".JK", "").strip().upper()
+    if not normalized_code:
+        return "UNKNOWN"
+
+    try:
+        payload = _request(
+            "GET",
+            f"analysis/information/{normalized_code}",
+            category="stock_information",
+        )
+    except InvezgoError as exc:
+        logger.warning("Gagal mengambil sector %s: %s", normalized_code, exc)
+        return "UNKNOWN"
+
+    if not isinstance(payload, dict):
+        logger.warning("Stock information %s bukan object", normalized_code)
+        return "UNKNOWN"
+
+    sector = str(payload.get("sector") or "").strip()
+    return sector or "UNKNOWN"
+
+
 def _rows_to_ohlc_df(rows: list[dict]) -> Optional[pd.DataFrame]:
     """
     Konversi array {date, open, high, low, close, volume} Invezgo → DataFrame
@@ -297,4 +323,3 @@ def fetch_index(code: str, from_date: str, to_date: str) -> Optional[pd.DataFram
     if not isinstance(payload, list):
         return None
     return _rows_to_ohlc_df(payload)
-
