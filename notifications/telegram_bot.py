@@ -96,6 +96,84 @@ def _format_tp_info(result, *, spaced_labels: bool = False) -> str:
 def _format_market_regime(result) -> str:
     regime = str(getattr(result, "market_regime", "UNKNOWN") or "UNKNOWN").upper()
     return {"BULL": "BULLISH", "BEAR": "BEARISH"}.get(regime, regime)
+def _build_api_payload(results: List, alert_type: str) -> List[dict]:
+    """Membangun list payload terstruktur dari result objects untuk dikirim ke Next.js API.
+    
+    Semua nilai numerik (tp1_pct, tp2_pct, sl_pct) sudah dikalkulasi di sini,
+    identik dengan yang dirender ke pesan Telegram — menjamin konsistensi data.
+    """
+    payload = []
+    for r in results:
+        tp1 = getattr(r, "tp1", None)
+        tp2 = getattr(r, "tp2", None)
+        tp1_pct = round(((tp1 - r.price) / r.price) * 100, 1) if tp1 and tp1 > 0 else None
+        tp2_pct = round(((tp2 - r.price) / r.price) * 100, 1) if tp2 and tp2 > 0 else None
+        payload.append({
+            "ticker": r.ticker.replace(".JK", ""),
+            "alert_price": r.price,
+            "change_percent": round(r.change_percent, 1),
+            "score": r.score,
+            "volume_ratio": round(r.volume_ratio, 1),
+            "daily_turnover": _format_transaction_value(getattr(r, "daily_turnover", 0)),
+            "market_regime": getattr(r, "market_regime", "UNKNOWN"),
+            "tp1": tp1,
+            "tp1_pct": tp1_pct,
+            "tp2": tp2,
+            "tp2_pct": tp2_pct,
+            "tp2_source": getattr(r, "tp2_source", None),
+            "sl": round(r.price * 0.95, 0),
+            "sl_pct": -5.0,
+            "alert_type": alert_type,
+            "alerted_at": datetime.now(WIB).isoformat(),
+            "status": "open",
+        })
+    return payload
+
+
+def _send_to_api(results: List, alert_type: str) -> None:
+    """Kirim data signal terstruktur ke Next.js API."""
+    try:
+        api_payload = _build_api_payload(results, alert_type)
+        response = requests.post(
+            "https://your-api.com/api/signals",
+            json=api_payload,
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.warning("Custom API error: %s", response.text)
+    except Exception as exc:
+        logger.warning("Custom API call failed: %s", exc)
+
+
+def format_strong_buy_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
+    if not results:
+        return ""
+    title = "<b>STRONG BUY DAILY</b>"
+    if part > 1:
+        title += f" <i>(bagian {part})</i>"
+    lines = [
+        "--------------------------",
+        "🚀" + title,
+        "--------------------------",
+        get_current_time_wib(),
+        "",
+    ]
+    for result in results:
+        ticker = result.ticker.replace(".JK", "")
+        change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
+        regime = getattr(result, "market_regime", "UNKNOWN")
+        lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
+        lines.append(
+            f"   Score {result.score} | {_format_volume_and_value(result)} | Mkt {regime}"
+        )
+        tp_info = _format_tp_info(result)
+        if tp_info:
+            lines.append(tp_info)
+        lines.append("")
+    total = total_count if total_count is not None else len(results)
+    lines.append(f"Total: {total} saham strong buy")
+    _append_alert_footer(lines)
+    return "\n".join(lines)
 
 
 def _format_supertrend_support(result) -> float:
@@ -284,11 +362,12 @@ def _chunked_alert_messages(results: List, format_fn) -> List[str]:
     return messages
 
 
-def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None) -> int:
+def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None, alert_type: str = "") -> int:
     sent = 0
     for msg in _chunked_alert_messages(results, format_fn):
         if send_telegram_message(msg, thread_id=thread_id):
             sent += 1
+            _send_to_api(results, alert_type)
     return sent
 
 
@@ -301,15 +380,15 @@ def send_all_alerts(signals: dict) -> int:
         )
     if signals.get("strong_buy"):
         messages_sent += send_chunked_alert(
-            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
+            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="strong_buy"
         )
     if signals.get("early_entry"):
         messages_sent += send_chunked_alert(
-            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
+            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="early_entry"
         )
     if signals.get("reversal_watch"):
         messages_sent += send_chunked_alert(
-            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID
+            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="reversal_watch"
         )
     return messages_sent
 
