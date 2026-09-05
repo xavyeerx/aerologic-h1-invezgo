@@ -135,7 +135,7 @@ def _send_to_api(results: List, alert_type: str) -> None:
     try:
         api_payload = _build_api_payload(results, alert_type)
         response = requests.post(
-            "https://your-api.com/api/signals",
+            "https://aerologicbot-web-app.vercel.app/api/webhook-bot-telegram",
             json=api_payload,
             timeout=10,
         )
