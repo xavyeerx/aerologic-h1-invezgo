@@ -82,8 +82,8 @@ def current_window(now: Optional[datetime] = None) -> ScreenWindow:
 
 def build_formula(win: ScreenWindow) -> str:
     parts = [
-        f'volume > avg("volume",20) * {win.vol_factor}',
-        f'avg("value",20) > {MIN_AVG_VALUE_20}',
+        f'volume > sma("volume",20) * {win.vol_factor}',
+        f'sma("value",20) > {MIN_AVG_VALUE_20}',
         "change_pct > -8",
     ]
     return " && ".join(parts)
@@ -101,7 +101,7 @@ def _volume_ratio(row: dict) -> float:
     if volume is None:
         return 0.0
     for key, value in row.items():
-        if key.startswith('avg("volume",20)') and value:
+        if key.startswith('sma("volume",20)') and value:
             try:
                 return float(volume) / float(value)
             except (TypeError, ValueError, ZeroDivisionError):

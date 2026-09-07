@@ -9,7 +9,7 @@ def candidate(code, change_pct, ratio):
         "code": code,
         "change_pct": change_pct,
         "volume": ratio * 100 * factor,
-        'avg("volume",20) * 0.5': 100 * factor,
+        'sma("volume",20) * 0.5': 100 * factor,
         "value": 10_000_000_000,
     }
 
@@ -17,7 +17,8 @@ def candidate(code, change_pct, ratio):
 class ScreenerLaneTests(unittest.TestCase):
     def test_formula_uses_historical_liquidity_and_broad_price_envelope(self):
         formula = build_formula(ScreenWindow("test", 0.5, True, True))
-        self.assertIn('avg("value",20) > 5000000000', formula)
+        self.assertIn('sma("value",20) > 5000000000', formula)
+        self.assertIn('volume > sma("volume",20) * 0.5', formula)
         self.assertIn("change_pct > -8", formula)
         self.assertNotIn("change_pct < 15", formula)
         self.assertNotIn(" && value > 5000000000", formula)
