@@ -17,12 +17,22 @@ class BarContract:
     reason: str = ""
 
 
+INVEZGO_H1_CONTRACT = BarContract(
+    scheme="invezgo_h1_v1",
+    timeframe="60m",
+    reference_source="invezgo",
+    parity_validated=True,
+    signal_eligible=True,
+    reason="Invezgo multi-time chart; closed 60-minute exchange buckets only",
+)
+
 INVEZGO_DAILY_CONTRACT = BarContract(
     scheme="invezgo_daily_v1",
     timeframe="1d",
     reference_source="invezgo",
     parity_validated=True,
-    signal_eligible=True,
+    signal_eligible=False,
+    reason="Daily bars are retained for compatibility and are not production signals",
 )
 
 

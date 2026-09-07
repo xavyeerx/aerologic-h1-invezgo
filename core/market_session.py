@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import date, datetime, time as dtime
 
+import pandas as pd
+
 
 # Median share of final daily volume per Invezgo 60-minute bucket.
 # Research sample: 10 liquid IDX stocks, 2026-06-15..2026-07-17 (230 stock-days).
@@ -67,6 +69,29 @@ def bucket_interval(day: date, hour: int) -> tuple[dtime, dtime] | None:
     return intervals.get(hour)
 
 
+def is_h1_bar_closed(label, now: datetime) -> bool:
+    """Whether an Invezgo 60-minute exchange bucket is complete at ``now``."""
+    timestamp = pd.Timestamp(label)
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.tz_localize(now.tzinfo)
+    else:
+        timestamp = timestamp.tz_convert(now.tzinfo)
+    if timestamp.date() < now.date():
+        return True
+    if timestamp.date() > now.date() or timestamp.weekday() >= 5:
+        return False
+    interval = bucket_interval(timestamp.date(), timestamp.hour)
+    if interval is None:
+        return False
+    naive_end = datetime.combine(timestamp.date(), interval[1])
+    end = (
+        now.tzinfo.localize(naive_end)
+        if hasattr(now.tzinfo, "localize")
+        else naive_end.replace(tzinfo=now.tzinfo)
+    )
+    return now >= end
+
+
 def _interval_progress(now: datetime, interval: tuple[dtime, dtime]) -> float:
     start, end = interval
     day_start = datetime.combine(now.date(), start, tzinfo=now.tzinfo)
@@ -89,4 +114,3 @@ def expected_daily_volume_fraction(now: datetime) -> float:
         if interval is not None:
             expected += share * _interval_progress(now, interval)
     return min(1.0, max(0.0, expected))
-

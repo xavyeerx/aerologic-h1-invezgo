@@ -32,6 +32,7 @@ load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 from .bar_contract import (
     INVEZGO_DAILY_CONTRACT,
+    INVEZGO_H1_CONTRACT,
     attach_bar_contract,
 )
 
@@ -269,6 +270,37 @@ def _rows_to_ohlc_df(rows: list[dict]) -> Optional[pd.DataFrame]:
     return attach_bar_contract(df, INVEZGO_DAILY_CONTRACT) if not df.empty else None
 
 
+def _rows_to_h1_ohlc_df(
+    rows: list[dict], now: Optional[datetime] = None
+) -> Optional[pd.DataFrame]:
+    """Convert multi-time rows to closed H1 bars with WIB wall-clock labels.
+
+    Invezgo returns IDX bucket labels such as ``08:00Z`` and ``09:00Z``. The
+    hour is the exchange bucket label; applying a UTC-to-WIB shift would corrupt
+    the session. We therefore localize that wall clock directly to WIB.
+    """
+    if not rows:
+        return None
+    df = pd.DataFrame(rows)
+    required = {"date", "open", "high", "low", "close", "volume"}
+    if not required.issubset(df.columns):
+        logger.warning("H1 chart row kekurangan kolom: punya %s", list(df.columns))
+        return None
+    for col in ("open", "high", "low", "close", "volume"):
+        df[col] = pd.to_numeric(df[col], errors="coerce")
+    labels = pd.to_datetime(df["date"], errors="coerce").dt.tz_localize(None)
+    df.index = labels.dt.tz_localize(WIB)
+    df = df.drop(columns=["date"])[["open", "high", "low", "close", "volume"]]
+    df = df[~df.index.duplicated(keep="last")].sort_index().dropna(subset=["close"])
+
+    from .market_session import is_h1_bar_closed
+    reference = now or datetime.now(WIB)
+    if reference.tzinfo is None:
+        reference = WIB.localize(reference)
+    df = df[[is_h1_bar_closed(timestamp, reference) for timestamp in df.index]]
+    return attach_bar_contract(df, INVEZGO_H1_CONTRACT) if not df.empty else None
+
+
 
 
 def fetch_chart(code: str, from_date: str, to_date: str) -> Optional[pd.DataFrame]:
@@ -300,6 +332,26 @@ def fetch_chart(code: str, from_date: str, to_date: str) -> Optional[pd.DataFram
     if not isinstance(payload, list):
         return None
     return _rows_to_ohlc_df(payload)
+
+
+def fetch_h1_chart(
+    code: str, from_date: str, to_date: str, *, now: Optional[datetime] = None
+) -> Optional[pd.DataFrame]:
+    """Fetch closed Invezgo 60-minute OHLC bars for a stock or index."""
+    from .quota_guard import chart_allowed
+    if not chart_allowed():
+        logger.error("[Quota] Circuit breaker aktif — skip H1 chart %s", code)
+        return None
+    payload = _request(
+        "GET", f"analysis/chart/multi-time/{code}", category="chart",
+        params={"from": from_date, "to": to_date, "timeframe": "60"},
+    )
+    if isinstance(payload, dict):
+        payload = payload.get("data")
+    if not isinstance(payload, list):
+        logger.warning("H1 chart %s menghasilkan payload tak terduga", code)
+        return None
+    return _rows_to_h1_ohlc_df(payload, now=now)
 
 
 

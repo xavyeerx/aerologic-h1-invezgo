@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260723-daily-migration"
+SCANNER_BUILD_ID = "20260907-h1-migration"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -57,7 +57,7 @@ PIVOT_LOOKBACK = 10
 SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 2.0
 
-# Final Daily signal engine thresholds
+# H1 signal engine thresholds. Migration defaults require forward validation.
 CONTINUATION_MIN_RETURN20 = float(os.getenv("CONTINUATION_MIN_RETURN20", "5.0"))
 CONTINUATION_MIN_VOLUME_RATIO = float(os.getenv("CONTINUATION_MIN_VOLUME_RATIO", "1.2"))
 STRONG_BUY_MAX_CHANGE_PCT = float(os.getenv("STRONG_BUY_MAX_CHANGE_PCT", "10.0"))
@@ -87,8 +87,8 @@ HOLD_THRESHOLD = 40
 
 # Scanner settings
 SCAN_ANALYZE_WORKERS = max(1, int(os.getenv("SCAN_ANALYZE_WORKERS", "4")))
-DATA_PERIOD = "90d"   # 90 hari kalender cukup untuk EMA200 + buffer libur
-DATA_INTERVAL = "1d"  # Daily candle — satu-satunya timeframe yang didukung
+DATA_PERIOD = "45d"   # roughly 300 closed H1 bars; enough for EMA200 warm-up
+DATA_INTERVAL = "60"  # Invezgo multi-timeframe 60-minute candle
 
 # Trading hours metadata
 TRADING_START_HOUR = 9

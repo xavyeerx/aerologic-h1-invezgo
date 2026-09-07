@@ -149,7 +149,7 @@ def _send_to_api(results: List, alert_type: str) -> None:
 def format_strong_buy_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-    title = "<b>STRONG BUY DAILY</b>"
+    title = "<b>STRONG BUY H1</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
     lines = [
@@ -189,7 +189,7 @@ def _format_supertrend_support(result) -> float:
 def format_reversal_watch_message(results: List, *, total_count: int | None = None, part: int = 1) -> str:
     if not results:
         return ""
-    title = "<b>REVERSAL WATCH DAILY</b>"
+    title = "<b>REVERSAL WATCH H1</b>"
     if part > 1:
         title += f" <i>(bagian {part})</i>"
     lines = [
@@ -267,7 +267,7 @@ def format_strong_buy_message(
     if not results:
         return ""
     lines = [
-        _format_title("🚀 STRONG BUY DAILY", part),
+        _format_title("🚀 STRONG BUY H1", part),
         "--------------------------",
         get_current_time_wib(),
         "",
@@ -300,7 +300,7 @@ def format_early_entry_message(
     if not results:
         return ""
     lines = [
-        _format_title("🎯 EARLY ENTRY DAILY (SEROK BAWAH)", part),
+        _format_title("🎯 EARLY ENTRY H1 (SEROK BAWAH)", part),
         "--------------------------",
         get_current_time_wib(),
         "<i>Sinyal dini — tunggu konfirmasi, bukan auto-entry.</i>",
@@ -408,13 +408,13 @@ def send_startup_message():
         return
     message = f"""
 --------------------------
-<b>AEROLOGIC DAILY STARTED</b>
+<b>AEROLOGIC H1 STARTED</b>
 --------------------------
 {get_current_time_wib()}
 Build: <code>{SCANNER_BUILD_ID}</code>
 
-Schedule: Mon-Thu 09:01-12:00 and 13:31-16:01 WIB; Fri 09:01-12:00 and 14:01-16:01 WIB; every 5 minutes.
-Alerts: Bullish Breakout, Strong Buy Daily, Early Entry Daily.
+Schedule: one minute after every closed Invezgo H1 bucket.
+Alerts: Bullish Breakout H1, Strong Buy H1, Early Entry H1.
 --------------------------
 """
     send_telegram_message(

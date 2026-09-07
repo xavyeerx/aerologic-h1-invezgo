@@ -55,7 +55,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
 
     def test_strong_buy_uses_supertrend_support_without_stop_loss(self):
         message = format_strong_buy_message([result()])
-        self.assertIn("<b>🚀 STRONG BUY DAILY</b>", message)
+        self.assertIn("<b>🚀 STRONG BUY H1</b>", message)
         self.assertIn("Trend IHSG: SIDEWAYS", message)
         self.assertIn("Sector: Barang Baku &amp; Industri", message)
         self.assertIn("Support: 480", message)
@@ -64,7 +64,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
 
     def test_early_entry_maps_bull_regime_and_uses_support(self):
         message = format_early_entry_message([result(market_regime="BULL")])
-        self.assertIn("<b>🎯 EARLY ENTRY DAILY (SEROK BAWAH)</b>", message)
+        self.assertIn("<b>🎯 EARLY ENTRY H1 (SEROK BAWAH)</b>", message)
         self.assertIn("Trend IHSG: BULLISH", message)
         self.assertIn("Sector: Barang Baku &amp; Industri", message)
         self.assertIn("Support: 480", message)

@@ -152,12 +152,15 @@ def calculate_supertrend(
     direction  = np.full(n, np.nan)
     supertrend = np.full(n, np.nan)
 
-    start = period  # first valid bar
+    # TradingView's first valid ATR is at period-1. Its built-in initializes
+    # direction=1 (downtrend / upper line); this project uses the inverse sign,
+    # so -1 means bearish and +1 bullish.
+    start = period - 1
     if n > start:
         upper_band[start] = basic_upper[start]
         lower_band[start] = basic_lower[start]
-        direction[start]  = 1  # assume bullish at initialisation
-        supertrend[start] = lower_band[start]
+        direction[start]  = -1
+        supertrend[start] = upper_band[start]
 
         for i in range(start + 1, n):
             # Upper band: only tighten (decrease); OR reset if prev close broke above it
@@ -188,7 +191,7 @@ def calculate_supertrend(
 
     # Persist as Series and forward-fill warm-up rows
     df["supertrend"]    = pd.Series(supertrend, index=df.index).ffill()
-    df["direction"]     = pd.Series(direction,  index=df.index).ffill().fillna(1).astype(int)
+    df["direction"]     = pd.Series(direction,  index=df.index).ffill().fillna(-1).astype(int)
     df["st_upper_band"] = pd.Series(upper_band, index=df.index).ffill()
     df["st_lower_band"] = pd.Series(lower_band, index=df.index).ffill()
 

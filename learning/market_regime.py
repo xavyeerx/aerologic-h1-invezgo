@@ -16,14 +16,14 @@ from typing import Optional
 
 import pytz
 
-from core.data_provider import fetch_index, InvezgoError
+from core.data_provider import fetch_h1_chart, InvezgoError
 
 logger = logging.getLogger(__name__)
 
 WIB = pytz.timezone("Asia/Jakarta")
 
 IHSG_CODE     = "COMPOSITE"   # kode indeks IHSG di Invezgo
-FETCH_DAYS    = 180           # kalender; cukup utk MA50 + ADX14 bar dagang
+FETCH_DAYS    = 45            # calendar days; enough for H1 MA50 + ADX warm-up
 ADX_PERIOD    = 14
 MA_SHORT      = 20
 MA_LONG       = 50
@@ -32,12 +32,12 @@ MA_LONG       = 50
 _cache: dict = {
     "regime":       "UNKNOWN",
     "adx":          0.0,
-    "momentum_5d":  0.0,
+    "momentum_5bar": 0.0,
     "ma20":         0.0,
     "ma50":         0.0,
     "last_fetch":   None,
 }
-_CACHE_TTL_HOURS = 4
+_CACHE_TTL_HOURS = 1
 
 
 def _calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.Series:
@@ -67,13 +67,12 @@ def _calculate_adx(df: pd.DataFrame, period: int = ADX_PERIOD) -> pd.Series:
 
 
 def _fetch_ihsg() -> Optional[pd.DataFrame]:
-    """Fetch IHSG (COMPOSITE) daily data dari Invezgo. DataFrame sudah bentuk
-    lowercase OHLCV + index tanggal naive WIB (via data_provider)."""
+    """Fetch closed IHSG H1 bars from Invezgo."""
     try:
         today = datetime.now(WIB).date()
         start = (today - timedelta(days=FETCH_DAYS)).strftime("%Y-%m-%d")
         end = today.strftime("%Y-%m-%d")
-        data = fetch_index(IHSG_CODE, start, end)
+        data = fetch_h1_chart(IHSG_CODE, start, end)
         if data is None or data.empty or len(data) < MA_LONG + ADX_PERIOD:
             logger.warning("[MarketRegime] Data IHSG tidak cukup")
             return None
@@ -89,10 +88,10 @@ def _detect_regime(df: pd.DataFrame) -> dict:
 
     BULL   → IHSG di atas MA20 DAN MA50
               AND ADX > 20 (ada momentum)
-              AND momentum 5d > +1%
+              AND momentum 5 H1 bars > +1%
 
     BEAR   → IHSG di bawah MA20 DAN MA50
-              AND momentum 5d < -1.5%
+              AND momentum 5 H1 bars < -1.5%
 
     SIDEWAYS → semua kondisi lainnya
                (IHSG antara dua MA, atau ADX lemah)
@@ -108,20 +107,20 @@ def _detect_regime(df: pd.DataFrame) -> dict:
     latest_ma50  = ma50.iloc[-1]
     latest_adx   = adx.iloc[-1]
 
-    # Momentum 5 hari
+    # Momentum over five closed H1 bars.
     if len(close) >= 6:
-        momentum_5d = ((latest_close - close.iloc[-6]) / close.iloc[-6]) * 100
+        momentum_5bar = ((latest_close - close.iloc[-6]) / close.iloc[-6]) * 100
     else:
-        momentum_5d = 0.0
+        momentum_5bar = 0.0
 
     # Tentukan regime
     above_ma20 = latest_close > latest_ma20
     above_ma50 = latest_close > latest_ma50
     strong_trend = latest_adx > 20
 
-    if above_ma20 and above_ma50 and strong_trend and momentum_5d > 1.0:
+    if above_ma20 and above_ma50 and strong_trend and momentum_5bar > 1.0:
         regime = "BULL"
-    elif (not above_ma20) and (not above_ma50) and momentum_5d < -1.5:
+    elif (not above_ma20) and (not above_ma50) and momentum_5bar < -1.5:
         regime = "BEAR"
     else:
         regime = "SIDEWAYS"
@@ -129,7 +128,9 @@ def _detect_regime(df: pd.DataFrame) -> dict:
     return {
         "regime":      regime,
         "adx":         round(float(latest_adx), 2) if not np.isnan(latest_adx) else 0.0,
-        "momentum_5d": round(float(momentum_5d), 2),
+        "momentum_5bar": round(float(momentum_5bar), 2),
+        # Database compatibility; value now represents five H1 bars.
+        "momentum_5d": round(float(momentum_5bar), 2),
         "ma20":        round(float(latest_ma20), 2) if not np.isnan(latest_ma20) else 0.0,
         "ma50":        round(float(latest_ma50), 2) if not np.isnan(latest_ma50) else 0.0,
         "close":       round(float(latest_close), 2),
@@ -148,7 +149,7 @@ def get_market_regime(force_refresh: bool = False) -> dict:
       ma50        : float
       close       : float — harga penutupan IHSG terakhir
 
-    Menggunakan cache (TTL 4 jam) agar tidak re-fetch setiap scan.
+    Uses a one-hour cache for closed-H1 regime context.
     """
     global _cache
 
@@ -165,7 +166,7 @@ def get_market_regime(force_refresh: bool = False) -> dict:
             _cache = {**result, "last_fetch": now}
             logger.info(
                 f"[MarketRegime] IHSG: {result['regime']} | "
-                f"ADX={result['adx']} | Mom5d={result['momentum_5d']:+.1f}% | "
+                f"ADX={result['adx']} | Mom5bar={result['momentum_5bar']:+.1f}% | "
                 f"MA20={result['ma20']:.0f} MA50={result['ma50']:.0f}"
             )
         else:
@@ -175,7 +176,7 @@ def get_market_regime(force_refresh: bool = False) -> dict:
                 # Belum pernah berhasil fetch sama sekali
                 return {
                     "regime": "UNKNOWN", "adx": 0.0,
-                    "momentum_5d": 0.0, "ma20": 0.0,
+                    "momentum_5bar": 0.0, "momentum_5d": 0.0, "ma20": 0.0,
                     "ma50": 0.0, "close": 0.0
                 }
 

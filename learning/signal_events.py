@@ -104,6 +104,8 @@ def signal_snapshot(scan_result, signal_type: str, regime_info: dict) -> dict[st
         "setup_family": "REVERSAL" if getattr(scan_result, "is_counter_trend", False) else "CONTINUATION",
         "mode": "PRODUCTION", "formula_version": "risk_aware_v1_shadow_pending",
         "build_id": settings.SCANNER_BUILD_ID,
+        "timeframe": "H1",
+        "bar_timestamp": getattr(scan_result, "bar_timestamp", None),
         "market_regime": regime_info.get("regime", "UNKNOWN"),
         "features": {name: getattr(scan_result, name, None) for name in fields},
     }

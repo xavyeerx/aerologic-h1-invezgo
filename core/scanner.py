@@ -11,6 +11,7 @@ import pytz
 
 from config.settings import *
 from .arb_filter import apply_post_alert_arb_gate
+from .bar_contract import require_price_signal_eligible
 from .data_fetcher import compute_session_change_percent
 from .indicators import calculate_all_indicators
 from .scoring import calculate_total_score
@@ -75,6 +76,7 @@ class ScanResult:
         self.is_st_continuation = False
         self.bars_since_breakout = 0
         self.price_vs_supertrend_pct = 0.0
+        self.bar_timestamp = None
 
 
 def _macd_status(latest: pd.Series) -> str:
@@ -195,6 +197,7 @@ def analyze_stock(
 
     try:
         df = df.copy()
+        require_price_signal_eligible(df)
         df["turnover"] = df["close"] * df["volume"]
         trade_dates = pd.DatetimeIndex(df.index).date
         turnover_by_day = df["turnover"].groupby(trade_dates).sum()
@@ -208,6 +211,7 @@ def analyze_stock(
 
         df = calculate_all_indicators(df)
         latest = df.iloc[-1]
+        result.bar_timestamp = df.index[-1].isoformat()
 
         result.price = float(latest.get("close", 0.0) or 0.0)
         # direction==1 (bullish supertrend) adalah primary signal;
@@ -246,19 +250,7 @@ def analyze_stock(
         result.change_percent = compute_session_change_percent(df, ticker)
         result.score, result.status, result.status_emoji = calculate_total_score(df)
 
-        # Override harga & change_pct dengan data realtime dari screener —
-        # lebih fresh daripada close candle daily terakhir.
-        # Analisis teknikal tetap pakai daily candle.
-        if screener_price:
-            sp_close = screener_price.get("close")
-            sp_change = screener_price.get("change_pct")
-            if sp_close and sp_close > 0:
-                result.price = float(sp_close)
-                logger.debug("[%s] price override: Daily=%.0f → screener=%.0f",
-                             ticker, float(latest.get("close", 0) or 0), result.price)
-            if sp_change is not None:
-                result.change_percent = float(sp_change)
-
+        # Closed H1 signals deliberately ignore realtime screener price overrides.
         result.is_bullish_break = _is_bullish_supertrend_break(df, result.price)
         result.is_supertrend_flip = result.is_bullish_break
         result.is_supertrend_bounce = _is_bullish_supertrend_bounce(df, result.price)
@@ -329,11 +321,11 @@ def analyze_stock(
 
         if len(df) >= 2:
             no_lower_low = float(df["low"].iloc[-1]) >= float(df["low"].iloc[-2])
-            today_range = (float(df["high"].iloc[-1]) - float(df["low"].iloc[-1])) / candle_close * 100.0
-            yesterday_range = (
+            latest_bar_range = (float(df["high"].iloc[-1]) - float(df["low"].iloc[-1])) / candle_close * 100.0
+            previous_bar_range = (
                 (float(df["high"].iloc[-2]) - float(df["low"].iloc[-2])) / float(df["close"].iloc[-2]) * 100.0
             )
-            range_shrinking = today_range < yesterday_range
+            range_shrinking = latest_bar_range < previous_bar_range
             low_diff = abs(float(df["low"].iloc[-1]) - float(df["low"].iloc[-2])) / candle_close * 100.0
             price_defended = low_diff < 1.5
             volume_increasing = float(df["volume"].iloc[-1]) > float(df["volume"].iloc[-2])

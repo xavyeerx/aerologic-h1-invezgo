@@ -311,6 +311,10 @@ class StateManager:
                         fcntl.flock(lock_file, fcntl.LOCK_UN)
             return self._claim_alert_unlocked(signal_type, ticker)
 
+    def try_claim_h1_alert(self, signal_type: str, ticker: str) -> bool:
+        """Claim a closed-H1 signal while preserving the existing daily risk cap."""
+        return self.try_claim_daily_alert(signal_type, ticker)
+
     def add_alerted_stock(self, signal_type: str, ticker: str):
         """Backward-compatible entrypoint; applies the same safety gate."""
         return self.try_claim_daily_alert(signal_type, ticker)

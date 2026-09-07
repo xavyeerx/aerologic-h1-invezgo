@@ -3,6 +3,8 @@ from types import SimpleNamespace
 
 import pandas as pd
 
+from core.indicators import calculate_supertrend
+
 from core.scanner import (
     _idx_tick_size,
     _next_idx_price_above,
@@ -14,6 +16,17 @@ from core.scanner import (
 
 
 class SupertrendBreakTests(unittest.TestCase):
+    def test_tradingview_initializes_at_first_atr_bar_on_upper_band(self):
+        frame = pd.DataFrame({
+            "high": [11, 12, 13, 14],
+            "low": [9, 10, 11, 12],
+            "close": [10, 11, 12, 13],
+        })
+        calculate_supertrend(frame, period=3, multiplier=2)
+        self.assertTrue(pd.isna(frame["supertrend"].iloc[1]))
+        self.assertEqual(frame["direction"].iloc[2], -1)
+        self.assertEqual(frame["supertrend"].iloc[2], 16.0)
+
     def test_idx_tick_ladder(self):
         self.assertEqual(_idx_tick_size(199), 1.0)
         self.assertEqual(_idx_tick_size(200), 2.0)

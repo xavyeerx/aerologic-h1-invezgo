@@ -12,7 +12,7 @@ Bot jalan sebagai service `systemd` dari user VPS default `ubuntu`, dengan folde
 /home/ubuntu/aerologic
 ```
 
-Jadwal scanner diatur oleh `scheduler.py`: Senin-Kamis `09:01-12:00` dan `13:31-16:01`, Jumat `09:01-12:00` dan `14:01-16:01`, weekend libur.
+Jadwal scanner diatur oleh `scheduler.py` dan berjalan satu menit setelah setiap bucket H1 Invezgo ditutup, termasuk bucket sesi pendek dan auction; weekend libur.
 
 ## 1. Push dari Lokal ke GitHub
 
@@ -105,7 +105,7 @@ Isi minimal:
 
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
-TELEGRAM_CHAT_ID=replace_me
+TELEGRAM_CHAT_ID=-1004302626864
 TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
@@ -113,7 +113,7 @@ INVEZGO_API_KEY=replace_me
 Kalau pakai Telegram Topics, tambahkan:
 
 ```dotenv
-TELEGRAM_SCANNER_TOPIC_ID=replace_me
+TELEGRAM_SCANNER_TOPIC_ID=699
 ```
 
 ## 4. Test Sebelum Service

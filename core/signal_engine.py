@@ -1,4 +1,4 @@
-"""Pure Daily signal-family rules, separated from indicator calculation and I/O."""
+"""Pure H1 signal-family rules, separated from indicator calculation and I/O."""
 
 from dataclasses import dataclass
 

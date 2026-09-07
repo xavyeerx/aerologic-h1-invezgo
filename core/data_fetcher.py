@@ -23,7 +23,7 @@ from typing import List, Optional
 import pandas as pd
 import pytz
 
-from .data_provider import fetch_chart, InvezgoError
+from .data_provider import fetch_h1_chart, InvezgoError
 
 # Konkurensi fetch chart. Rate limiter global di data_provider (token bucket)
 # tetap membatasi laju total req/detik, jadi thread hanya mengisi waktu tunggu
@@ -37,7 +37,7 @@ WIB = pytz.timezone("Asia/Jakarta")
 
 # DATA_PERIOD (mis. "90d") = target lebar seri; buffer kalender menambah hari
 # non-dagang/libur agar cukup bar dagang harian terkumpul.
-DAILY_FETCH_CALENDAR_BUFFER_DAYS = 45
+H1_FETCH_CALENDAR_BUFFER_DAYS = 15
 
 
 def _period_to_range(period: str) -> tuple[str, str]:
@@ -51,7 +51,7 @@ def _period_to_range(period: str) -> tuple[str, str]:
             hint = int(period[:-1])
         except ValueError:
             pass
-    days_back = hint + DAILY_FETCH_CALENDAR_BUFFER_DAYS
+    days_back = hint + H1_FETCH_CALENDAR_BUFFER_DAYS
     today = datetime.now(WIB).date()
     start = today - timedelta(days=days_back)
     return start.strftime("%Y-%m-%d"), today.strftime("%Y-%m-%d")
@@ -62,15 +62,16 @@ def strip_suffix(ticker: str) -> str:
     return ticker.replace(".JK", "").strip().upper()
 
 
-def fetch_stock_data(ticker: str, period: str = "90d", interval: str = "1d") -> Optional[pd.DataFrame]:
+def fetch_stock_data(ticker: str, period: str = "45d", interval: str = "60") -> Optional[pd.DataFrame]:
     """
-    Fetch OHLC harian 1 saham dari Invezgo (always daily candle).
-    Parameter `interval` dipertahankan untuk kompatibilitas signature tapi diabaikan.
+    Fetch closed H1 OHLC for one stock from Invezgo.
     """
     code = strip_suffix(ticker)
     start_s, end_s = _period_to_range(period)
     try:
-        df = fetch_chart(code, start_s, end_s)
+        if str(interval).lower() not in {"60", "60m", "1h", "h1"}:
+            raise ValueError(f"Unsupported production interval: {interval}")
+        df = fetch_h1_chart(code, start_s, end_s)
     except InvezgoError as e:
         logger.error("Error fetching %s: %s", code, e)
         return None
@@ -79,7 +80,7 @@ def fetch_stock_data(ticker: str, period: str = "90d", interval: str = "1d") -> 
     return df
 
 
-def fetch_multiple_stocks(tickers: List[str], period: str = "90d", interval: str = "1d") -> dict:
+def fetch_multiple_stocks(tickers: List[str], period: str = "45d", interval: str = "60") -> dict:
     """
     Fetch OHLC harian untuk daftar ticker (kandidat hasil screener), 1 request per ticker.
     Kembalikan dict {ticker_asli: DataFrame}. Kegagalan 1 ticker di-skip (tidak menggagalkan
@@ -88,6 +89,8 @@ def fetch_multiple_stocks(tickers: List[str], period: str = "90d", interval: str
     Catatan: ticker dikembalikan dengan bentuk asli yang diminta caller (mis. tetap 'BBCA'
     kalau caller kasih 'BBCA'), supaya konsisten dengan state_manager & signal_tracker.
     """
+    if str(interval).lower() not in {"60", "60m", "1h", "h1"}:
+        raise ValueError(f"Unsupported production interval: {interval}")
     results: dict = {}
     start_s, end_s = _period_to_range(period)
     total = len(tickers)
@@ -100,7 +103,7 @@ def fetch_multiple_stocks(tickers: List[str], period: str = "90d", interval: str
     def _one(ticker: str) -> tuple[str, Optional[pd.DataFrame]]:
         code = strip_suffix(ticker)
         try:
-            return ticker, fetch_chart(code, start_s, end_s)
+            return ticker, fetch_h1_chart(code, start_s, end_s)
         except InvezgoError as e:
             logger.warning("Skip %s: %s", code, e)
             return ticker, None
@@ -156,11 +159,11 @@ def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> fl
 
 
 def compute_session_change_percent(df: pd.DataFrame, ticker: Optional[str] = None) -> float:
-    """% perubahan close terakhir vs penutupan sesi sebelumnya."""
+    """% change of latest closed H1 bar versus the preceding H1 bar."""
     if df is None or len(df) < 1:
         return 0.0
     current = float(df["close"].iloc[-1])
-    prev = resolve_previous_close(df, ticker)
+    prev = float(df["close"].iloc[-2]) if len(df) >= 2 else 0.0
     if prev <= 0:
         return 0.0
     return ((current - prev) / prev) * 100.0

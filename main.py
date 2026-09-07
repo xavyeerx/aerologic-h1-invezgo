@@ -27,7 +27,7 @@ except ImportError:
     _REGIME_OK = False
 
     def get_market_regime(**kw):
-        return {"regime": "UNKNOWN", "adx": 0.0, "momentum_5d": 0.0}
+        return {"regime": "UNKNOWN", "adx": 0.0, "momentum_5bar": 0.0}
 
 
 try:
@@ -86,7 +86,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         return {"skipped": True, "reason": "Outside trading hours"}
 
     logger.info("=" * 50)
-    logger.info("Starting aerologic Daily scan")
+    logger.info("Starting aerologic H1 closed-candle scan")
     logger.info("=" * 50)
     scan_t0 = time.perf_counter()
     state_manager.reset_daily_if_new_day()
@@ -126,7 +126,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         return {"error": "No data fetched"}
 
     previous_states = state_manager.get_all_states()
-    regime_info = {"regime": "UNKNOWN", "adx": 0.0, "momentum_5d": 0.0}
+    regime_info = {"regime": "UNKNOWN", "adx": 0.0, "momentum_5bar": 0.0}
     if _REGIME_OK:
         try:
             regime_info = get_market_regime()
@@ -134,10 +134,10 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
             logger.warning("[Regime] Gagal ambil market regime: %s", exc)
     market_regime = regime_info.get("regime", "UNKNOWN")
     logger.info(
-        "Market regime: %s | ADX=%s | Mom5d=%+.1f%%",
+        "Market regime H1: %s | ADX=%s | Mom5bar=%+.1f%%",
         market_regime,
         regime_info.get("adx", 0),
-        float(regime_info.get("momentum_5d", 0) or 0),
+        float(regime_info.get("momentum_5bar", 0) or 0),
     )
 
     logger.info("Analyzing stocks...")
@@ -146,7 +146,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         previous_states,
         state_manager=state_manager,
         market_regime=market_regime,
-        market_momentum_5d=float(regime_info.get("momentum_5d", 0) or 0),
+        market_momentum_5d=float(regime_info.get("momentum_5bar", 0) or 0),
         screener_prices=screener_prices,
     )
 
@@ -160,7 +160,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
     for signal_type, signal_list in all_signals.items():
         claimed = []
         for result in signal_list:
-            if state_manager.try_claim_daily_alert(signal_type, result.ticker):
+            if state_manager.try_claim_h1_alert(signal_type, result.ticker):
                 claimed.append(result)
         new_signals[signal_type] = claimed
         if signal_list:
@@ -248,7 +248,7 @@ def main():
 
 
 def run_with_notification():
-    logger.info("aerologic Daily scanner starting with notification...")
+    logger.info("aerologic H1 scanner starting with notification...")
     send_startup_message()
     run_scan(StateManager(), force=True)
 

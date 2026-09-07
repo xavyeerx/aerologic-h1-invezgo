@@ -1,10 +1,7 @@
 # ============================================
-# SCHEDULER - aerologic Daily
+# SCHEDULER - aerologic H1 (closed candles only)
 # ============================================
-# Jadwal harian (WIB, Senin-Jumat):
-#   Senin-Kamis: 09:01-12:00 dan 13:31-16:01 -> Scan tiap 5 menit
-#   Jumat      : 09:01-12:00 dan 14:01-16:01 -> Scan tiap 5 menit
-#   Weekend    : Libur
+# Runs one minute after each Invezgo H1 exchange bucket closes; weekend is off.
 
 import logging
 import logging.handlers
@@ -46,7 +43,18 @@ MORNING_SCAN_END = dtime(12, 0)
 AFTERNOON_SCAN_START = dtime(13, 31)
 FRIDAY_AFTERNOON_SCAN_START = dtime(14, 1)
 AFTERNOON_SCAN_END = dtime(16, 1)
-SCAN_INTERVAL_SECONDS = 5 * 60
+SCAN_INTERVAL_SECONDS = 60 * 60
+
+# One minute after each Invezgo exchange bucket closes. The irregular IDX lunch
+# break and closing auction mean these are intentionally not a simple cron */60.
+H1_CLOSE_SLOTS_MON_THU = (
+    dtime(9, 1), dtime(10, 1), dtime(11, 1), dtime(12, 1),
+    dtime(14, 1), dtime(15, 1), dtime(15, 51), dtime(16, 16),
+)
+H1_CLOSE_SLOTS_FRIDAY = (
+    dtime(9, 1), dtime(10, 1), dtime(11, 1), dtime(11, 31),
+    dtime(15, 1), dtime(15, 51), dtime(16, 16),
+)
 
 
 def _today_at(t: dtime, tz=WIB) -> datetime:
@@ -83,20 +91,11 @@ def smart_sleep_until(target: datetime, label: str) -> None:
 
 
 def scan_slots_for_day(now: datetime) -> list[datetime]:
-    afternoon_start = FRIDAY_AFTERNOON_SCAN_START if now.weekday() == 4 else AFTERNOON_SCAN_START
-    slots: list[datetime] = []
-    for start, end in (
-        (MORNING_SCAN_START, MORNING_SCAN_END),
-        (afternoon_start, AFTERNOON_SCAN_END),
-    ):
-        cursor = now.replace(hour=start.hour, minute=start.minute, second=start.second, microsecond=0)
-        stop = now.replace(hour=end.hour, minute=end.minute, second=end.second, microsecond=0)
-        while cursor <= stop:
-            slots.append(cursor)
-            cursor += timedelta(seconds=SCAN_INTERVAL_SECONDS)
-        if slots[-1] < stop:
-            slots.append(stop)
-    return slots
+    labels = H1_CLOSE_SLOTS_FRIDAY if now.weekday() == 4 else H1_CLOSE_SLOTS_MON_THU
+    return [
+        now.replace(hour=value.hour, minute=value.minute, second=0, microsecond=0)
+        for value in labels
+    ]
 
 
 def next_scan_slot(now: datetime) -> datetime | None:
@@ -151,9 +150,9 @@ def main() -> None:
 
     ensure_single_scheduler_process()
     logger.info("=" * 50)
-    logger.info("aerologic Daily scheduler")
+    logger.info("aerologic H1 scheduler")
     logger.info("Build: %s", SCANNER_BUILD_ID)
-    logger.info("Scan tiap 5 menit: Senin-Kamis 09:01-12:00 dan 13:31-16:01; Jumat 09:01-12:00 dan 14:01-16:01")
+    logger.info("Scan satu menit setelah setiap candle Invezgo H1 ditutup")
     logger.info("=" * 50)
 
     state_manager = StateManager()
@@ -173,7 +172,7 @@ def main() -> None:
             # mengembalikan slot masa depan, bukan slot yang baru saja tiba.
             now = datetime.now(WIB)
             elapsed = (now - target).total_seconds()
-            slot_window = SCAN_INTERVAL_SECONDS - 5  # toleransi hingga akhir interval
+            slot_window = 5 * 60  # do not process a stale close much later
 
             if target != last_scan_slot and elapsed < slot_window:
                 last_scan_slot = target
@@ -199,7 +198,7 @@ def main() -> None:
 
         except KeyboardInterrupt:
             logger.info("Scheduler dihentikan.")
-            send_telegram_message("aerologic Daily scanner stopped")
+            send_telegram_message("aerologic H1 scanner stopped")
             break
         except Exception as exc:
             logger.error("Scheduler error tak terduga: %s", exc)

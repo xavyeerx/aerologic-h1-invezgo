@@ -12,7 +12,7 @@ Sistem bot ini terdiri dari 4 komponen utama:
 
 1. **Scheduler (`scheduler.py`)**
    Merupakan *entry point* yang menjaga agar proses berjalan terus-menerus di *background*.
-   - **Tugas**: Menghitung jadwal *scan* (setiap 5 menit selama jam perdagangan Bursa Efek Indonesia) dan melakukan mekanisme `smart_sleep_until` untuk menghemat *resource*.
+   - **Tugas**: Menjadwalkan scan satu menit setelah setiap bucket H1 Invezgo ditutup dan melakukan `smart_sleep_until` untuk menghemat resource.
    - **Concurrency Control**: Menjalankan fungsi `ensure_single_scheduler_process()` dengan mendeteksi *Process ID* (PID) menggunakan *command* `pgrep` di OS, guna memastikan tidak ada duplikasi *scheduler* yang berjalan secara bersamaan.
    
 2. **Main Runner (`main.py`)**
@@ -42,7 +42,7 @@ Proses eksekusi bot berjalan secara kronologis sebagai berikut:
    - `scan_all_stocks()`: Menjalankan algoritma pemeringkatan dan mendeteksi kondisi teknikal setiap saham.
 5. **Signal Validation**:
    - Fungsi `filter_signals()` memisahkan hasil menjadi beberapa kategori: `strong_buy`, `early_entry`, dan `reversal_watch`.
-   - Menggunakan `try_claim_daily_alert` pada *State Manager* untuk memastikan hanya sinyal *fresh* yang dieksekusi untuk dikirim.
+   - Menggunakan `try_claim_h1_alert` pada *State Manager* untuk memastikan hanya sinyal closed-H1 yang *fresh* dieksekusi untuk dikirim; daily risk cap lama tetap dipertahankan.
 6. **Dispatch & Notification**:
    - Jika terdapat sinyal baru, fungsi `send_all_alerts(new_signals)` di modul Telegram akan dieksekusi.
    - Hasil dikelompokkan ke dalam format *message* yang sesuai dengan kriteria (judul tebal, emoji penanda) lalu di-POST ke Telegram API menggunakan `TELEGRAM_SCANNER_TOPIC_ID`.

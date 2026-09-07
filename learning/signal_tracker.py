@@ -128,7 +128,8 @@ def track_signal(scan_result, signal_type_key: str, regime_info: dict) -> bool:
             'bars_since_breakout':     int(getattr(r, 'bars_since_breakout', 0)),
             'price_vs_supertrend_pct': _safe_float(getattr(r, 'price_vs_supertrend_pct', 0)),
             'ihsg_adx':                _safe_float(regime_info.get('adx', 0)),
-            'ihsg_momentum_5d_pct':    _safe_float(regime_info.get('momentum_5d', 0)),
+            # Legacy DB column; value now means five closed H1 bars.
+            'ihsg_momentum_5d_pct':    _safe_float(regime_info.get('momentum_5bar', 0)),
             'prev_signal_outcome':     prev_outcome,
             'atr_pct':                 _safe_float(getattr(r, 'atr_pct', 0)),
             'correction_depth_pct':    _safe_float(getattr(r, 'correction_percent', 0)),
