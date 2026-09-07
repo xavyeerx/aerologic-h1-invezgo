@@ -9,13 +9,13 @@ StartLimitBurst=5
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/aerologic
-EnvironmentFile=/home/ubuntu/aerologic/.env
+WorkingDirectory=/home/ubuntu/aerologic-h1-invezgo
+EnvironmentFile=/home/ubuntu/aerologic-h1-invezgo/.env
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-RuntimeDirectory=aerologic
+RuntimeDirectory=aerologic-h1-invezgo
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/flock --no-fork --nonblock /run/aerologic/scheduler.lock /home/ubuntu/aerologic/venv/bin/python /home/ubuntu/aerologic/scheduler.py
+ExecStart=/usr/bin/flock --no-fork --nonblock /run/aerologic-h1-invezgo/scheduler.lock /home/ubuntu/aerologic-h1-invezgo/venv/bin/python /home/ubuntu/aerologic-h1-invezgo/scheduler.py
 Restart=on-failure
 RestartSec=15s
 KillMode=control-group
@@ -27,7 +27,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=read-only
 ProtectSystem=full
-ReadWritePaths=/home/ubuntu/aerologic/database /home/ubuntu/aerologic/logs
+ReadWritePaths=/home/ubuntu/aerologic-h1-invezgo/database /home/ubuntu/aerologic-h1-invezgo/logs
 RestrictSUIDSGID=true
 
 [Install]

@@ -3,13 +3,13 @@
 Target GitHub:
 
 ```text
-git@github.com:xavyeerx/aerologic.git
+git@github.com:xavyeerx/aerologic-h1-invezgo.git
 ```
 
 Bot jalan sebagai service `systemd` dari user VPS default `ubuntu`, dengan folder aplikasi:
 
 ```text
-/home/ubuntu/aerologic
+/home/ubuntu/aerologic-h1-invezgo
 ```
 
 Jadwal scanner diatur oleh `scheduler.py` dan berjalan satu menit setelah setiap bucket H1 Invezgo ditutup, termasuk bucket sesi pendek dan auction; weekend libur.
@@ -20,7 +20,7 @@ Pastikan remote pakai SSH:
 
 ```bash
 git remote -v
-git remote set-url origin git@github.com:xavyeerx/aerologic.git
+git remote set-url origin git@github.com:xavyeerx/aerologic-h1-invezgo.git
 ```
 
 Untuk push perubahan:
@@ -75,8 +75,8 @@ Salin output pubkey di atas, lalu tambahkan ke GitHub → Settings → SSH and G
 ```bash
 ssh -T git@github.com
 cd /home/ubuntu
-git clone git@github.com:xavyeerx/aerologic.git aerologic
-cd /home/ubuntu/aerologic
+git clone git@github.com:xavyeerx/aerologic-h1-invezgo.git aerologic-h1-invezgo
+cd /home/ubuntu/aerologic-h1-invezgo
 python3 -m venv venv
 ./venv/bin/python -m pip install --upgrade pip
 ./venv/bin/pip install -r requirements.txt
@@ -86,7 +86,7 @@ mkdir -p database logs
 Kalau folder `aerologic` sudah ada dan ingin ambil update terbaru:
 
 ```bash
-cd /home/ubuntu/aerologic
+cd /home/ubuntu/aerologic-h1-invezgo
 git pull --ff-only origin main
 ./venv/bin/pip install -r requirements.txt
 ```
@@ -96,7 +96,7 @@ git pull --ff-only origin main
 Buat `.env` langsung di folder app:
 
 ```bash
-cd /home/ubuntu/aerologic
+cd /home/ubuntu/aerologic-h1-invezgo
 nano .env
 chmod 600 .env
 ```
@@ -119,7 +119,7 @@ TELEGRAM_SCANNER_TOPIC_ID=699
 ## 4. Test Sebelum Service
 
 ```bash
-cd /home/ubuntu/aerologic
+cd /home/ubuntu/aerologic-h1-invezgo
 ./venv/bin/python -m compileall -q -f main.py scheduler.py config core database learning notifications scripts
 ./venv/bin/python -c "import main, scheduler; print('runtime imports: OK')"
 ./venv/bin/python -m unittest discover -s tests -v
@@ -127,21 +127,21 @@ cd /home/ubuntu/aerologic
 
 ## 5. Pasang Systemd
 
-Service template sudah disiapkan untuk user `ubuntu` dan path `/home/ubuntu/aerologic`.
+Service template sudah disiapkan untuk user `ubuntu` dan path `/home/ubuntu/aerologic-h1-invezgo`.
 
 ```bash
-sudo cp /home/ubuntu/aerologic/deploy/ihsg-scanner.service.example /etc/systemd/system/aerologic-scanner.service
-sudo systemd-analyze verify /etc/systemd/system/aerologic-scanner.service
+sudo cp /home/ubuntu/aerologic-h1-invezgo/deploy/ihsg-scanner.service.example /etc/systemd/system/aerologic-h1-invezgo.service
+sudo systemd-analyze verify /etc/systemd/system/aerologic-h1-invezgo.service
 sudo systemctl daemon-reload
-sudo systemctl enable --now aerologic-scanner.service
-sudo systemctl status aerologic-scanner.service --no-pager
+sudo systemctl enable --now aerologic-h1-invezgo.service
+sudo systemctl status aerologic-h1-invezgo.service --no-pager
 ```
 
 Cek log:
 
 ```bash
-sudo journalctl -u aerologic-scanner.service -n 100 --no-pager
-sudo journalctl -u aerologic-scanner.service -f
+sudo journalctl -u aerologic-h1-invezgo.service -n 100 --no-pager
+sudo journalctl -u aerologic-h1-invezgo.service -f
 ```
 
 ## 6. Update Production
@@ -149,23 +149,23 @@ sudo journalctl -u aerologic-scanner.service -f
 Setelah push perubahan baru ke GitHub:
 
 ```bash
-sudo systemctl stop aerologic-scanner.service
-cd /home/ubuntu/aerologic
+sudo systemctl stop aerologic-h1-invezgo.service
+cd /home/ubuntu/aerologic-h1-invezgo
 git pull --ff-only origin main
 ./venv/bin/pip install -r requirements.txt
 ./venv/bin/python -m compileall -q -f main.py scheduler.py config core database learning notifications scripts
 ./venv/bin/python -c "import main, scheduler; print('runtime imports: OK')"
-sudo systemctl start aerologic-scanner.service
-sudo systemctl status aerologic-scanner.service --no-pager
+sudo systemctl start aerologic-h1-invezgo.service
+sudo systemctl status aerologic-h1-invezgo.service --no-pager
 ```
 
 ## 7. Operasi Cepat
 
 ```bash
-sudo systemctl status aerologic-scanner.service --no-pager
-sudo systemctl restart aerologic-scanner.service
-sudo systemctl stop aerologic-scanner.service
-sudo journalctl -u aerologic-scanner.service -f
+sudo systemctl status aerologic-h1-invezgo.service --no-pager
+sudo systemctl restart aerologic-h1-invezgo.service
+sudo systemctl stop aerologic-h1-invezgo.service
+sudo journalctl -u aerologic-h1-invezgo.service -f
 pgrep -af scheduler.py
 ```
 
