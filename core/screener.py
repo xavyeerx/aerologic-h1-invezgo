@@ -82,6 +82,9 @@ def current_window(now: Optional[datetime] = None) -> ScreenWindow:
 
 def build_formula(win: ScreenWindow) -> str:
     parts = [
+        # Invezgo only returns computed fields referenced by the formula. Keep
+        # close explicit so intraday alerts can override the stale H1 payload.
+        "close > 0",
         f'volume > sma("volume",20) * {win.vol_factor}',
         f'sma("value",20) > {MIN_AVG_VALUE_20}',
         "change_pct > -8",
@@ -187,7 +190,8 @@ def get_candidates(now: Optional[datetime] = None) -> tuple[list[str], ScreenWin
     )
 
     # Kumpulkan harga realtime dari response screener untuk setiap kandidat.
-    # Field 'close' dan 'change_pct' sudah di-compute server-side Invezgo
+    # Field 'close' dan 'change_pct' sengaja direferensikan di formula agar
+    # dikembalikan oleh Invezgo dan bisa dipakai sebagai snapshot intraday.
     # (tick terakhir sesi berjalan) — jauh lebih fresh dari candle daily terakhir.
     screener_prices: dict = {}
     for row in picked:
