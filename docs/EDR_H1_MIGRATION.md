@@ -1,20 +1,21 @@
-# EDR: Invezgo Closed-Candle H1 Migration
+# EDR: Invezgo Intrabar H1 Migration
 
 ## Context and decision
 
 Production price signals use Invezgo `analysis/chart/multi-time/{code}` with
-`timeframe=60`. Daily chart data is no longer signal-eligible. Every indicator,
-including Supertrend, is calculated from the same sequence of completed H1 bars.
+`timeframe=60`. Daily chart data is no longer signal-eligible. The latest forming
+H1 bar is signal-eligible so intrabar Supertrend breakout can alert without waiting
+for bar close.
 
 ## Bar contract
 
-- Contract: `invezgo_h1_v1`, timeframe `60m`.
+- Contract: `invezgo_h1_live_v1`, timeframe `60m`.
 - Invezgo timestamps such as `09:00Z` are treated as IDX exchange wall-clock bucket
   labels and localized directly to `Asia/Jakarta`; they are not shifted from UTC.
-- Incomplete current buckets are removed using the IDX regular-session, lunch-break,
-  pre-open, pre-close, and auction bucket schedule.
-- The scheduler runs one minute after each expected bucket close. A five-minute stale
-  window avoids processing old slots after a long process pause.
+- The current incomplete bucket is retained. Its closed/open state is recorded as
+  `bar_closed` in signal events for auditability.
+- The scheduler runs every five minutes during IDX sessions. Price signals use the
+  latest available H1 bucket, including a forming candle.
 - Realtime screener prices select candidates only. They never override the H1 close
   used by Supertrend or signal decisions.
 
@@ -32,5 +33,6 @@ including Supertrend, is calculated from the same sequence of completed H1 bars.
 
 Thresholds inherited from the Daily strategy are migration defaults, not evidence of
 H1 strategy quality. Forward validation and historical H1 backtesting are required.
-Exact chart parity also depends on TradingView using an equivalent IDX feed, session,
-auction inclusion, corporate-action adjustment, and closed-bar comparison.
+Intrabar signals may repaint before close. Exact chart parity also depends on
+TradingView using an equivalent IDX feed, session, auction inclusion, corporate-action
+adjustment, and comparing both platforms at the same instant.

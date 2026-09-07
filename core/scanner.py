@@ -77,6 +77,7 @@ class ScanResult:
         self.bars_since_breakout = 0
         self.price_vs_supertrend_pct = 0.0
         self.bar_timestamp = None
+        self.bar_closed = True
 
 
 def _macd_status(latest: pd.Series) -> str:
@@ -198,6 +199,7 @@ def analyze_stock(
     try:
         df = df.copy()
         require_price_signal_eligible(df)
+        result.bar_closed = bool(df.attrs.get("latest_bar_closed", True))
         df["turnover"] = df["close"] * df["volume"]
         trade_dates = pd.DatetimeIndex(df.index).date
         turnover_by_day = df["turnover"].groupby(trade_dates).sum()
@@ -250,7 +252,7 @@ def analyze_stock(
         result.change_percent = compute_session_change_percent(df, ticker)
         result.score, result.status, result.status_emoji = calculate_total_score(df)
 
-        # Closed H1 signals deliberately ignore realtime screener price overrides.
+        # The live H1 chart close is authoritative; do not mix another quote feed.
         result.is_bullish_break = _is_bullish_supertrend_break(df, result.price)
         result.is_supertrend_flip = result.is_bullish_break
         result.is_supertrend_bounce = _is_bullish_supertrend_bounce(df, result.price)

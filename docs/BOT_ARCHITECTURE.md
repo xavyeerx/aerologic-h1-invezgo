@@ -42,7 +42,7 @@ Proses eksekusi bot berjalan secara kronologis sebagai berikut:
    - `scan_all_stocks()`: Menjalankan algoritma pemeringkatan dan mendeteksi kondisi teknikal setiap saham.
 5. **Signal Validation**:
    - Fungsi `filter_signals()` memisahkan hasil menjadi beberapa kategori: `strong_buy`, `early_entry`, dan `reversal_watch`.
-   - Menggunakan `try_claim_h1_alert` pada *State Manager* untuk memastikan hanya sinyal closed-H1 yang *fresh* dieksekusi untuk dikirim; daily risk cap lama tetap dipertahankan.
+   - Menggunakan `try_claim_h1_alert` untuk klaim sinyal H1 intrabar; daily risk cap tetap dipertahankan.
 6. **Dispatch & Notification**:
    - Jika terdapat sinyal baru, fungsi `send_all_alerts(new_signals)` di modul Telegram akan dieksekusi.
    - Hasil dikelompokkan ke dalam format *message* yang sesuai dengan kriteria (judul tebal, emoji penanda) lalu di-POST ke Telegram API menggunakan `TELEGRAM_SCANNER_TOPIC_ID`.

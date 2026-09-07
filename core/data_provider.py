@@ -271,9 +271,9 @@ def _rows_to_ohlc_df(rows: list[dict]) -> Optional[pd.DataFrame]:
 
 
 def _rows_to_h1_ohlc_df(
-    rows: list[dict], now: Optional[datetime] = None
+    rows: list[dict], now: Optional[datetime] = None, *, closed_only: bool = False
 ) -> Optional[pd.DataFrame]:
-    """Convert multi-time rows to closed H1 bars with WIB wall-clock labels.
+    """Convert multi-time rows to H1 bars with WIB wall-clock labels.
 
     Invezgo returns IDX bucket labels such as ``08:00Z`` and ``09:00Z``. The
     hour is the exchange bucket label; applying a UTC-to-WIB shift would corrupt
@@ -297,7 +297,13 @@ def _rows_to_h1_ohlc_df(
     reference = now or datetime.now(WIB)
     if reference.tzinfo is None:
         reference = WIB.localize(reference)
-    df = df[[is_h1_bar_closed(timestamp, reference) for timestamp in df.index]]
+    closed_flags = [is_h1_bar_closed(timestamp, reference) for timestamp in df.index]
+    if closed_only:
+        df = df[closed_flags]
+        closed_flags = [True] * len(df)
+    if df.empty:
+        return None
+    df.attrs["latest_bar_closed"] = bool(closed_flags[-1])
     return attach_bar_contract(df, INVEZGO_H1_CONTRACT) if not df.empty else None
 
 
@@ -335,9 +341,10 @@ def fetch_chart(code: str, from_date: str, to_date: str) -> Optional[pd.DataFram
 
 
 def fetch_h1_chart(
-    code: str, from_date: str, to_date: str, *, now: Optional[datetime] = None
+    code: str, from_date: str, to_date: str, *, now: Optional[datetime] = None,
+    closed_only: bool = False,
 ) -> Optional[pd.DataFrame]:
-    """Fetch closed Invezgo 60-minute OHLC bars for a stock or index."""
+    """Fetch Invezgo H1 bars, including the latest forming bar by default."""
     from .quota_guard import chart_allowed
     if not chart_allowed():
         logger.error("[Quota] Circuit breaker aktif — skip H1 chart %s", code)
@@ -351,7 +358,7 @@ def fetch_h1_chart(
     if not isinstance(payload, list):
         logger.warning("H1 chart %s menghasilkan payload tak terduga", code)
         return None
-    return _rows_to_h1_ohlc_df(payload, now=now)
+    return _rows_to_h1_ohlc_df(payload, now=now, closed_only=closed_only)
 
 
 

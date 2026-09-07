@@ -64,7 +64,7 @@ def strip_suffix(ticker: str) -> str:
 
 def fetch_stock_data(ticker: str, period: str = "45d", interval: str = "60") -> Optional[pd.DataFrame]:
     """
-    Fetch closed H1 OHLC for one stock from Invezgo.
+    Fetch H1 OHLC, including the latest forming candle, from Invezgo.
     """
     code = strip_suffix(ticker)
     start_s, end_s = _period_to_range(period)
@@ -159,7 +159,7 @@ def resolve_previous_close(df: pd.DataFrame, ticker: Optional[str] = None) -> fl
 
 
 def compute_session_change_percent(df: pd.DataFrame, ticker: Optional[str] = None) -> float:
-    """% change of latest closed H1 bar versus the preceding H1 bar."""
+    """% change of the latest H1 observation versus the preceding H1 bar."""
     if df is None or len(df) < 1:
         return 0.0
     current = float(df["close"].iloc[-1])

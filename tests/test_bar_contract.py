@@ -34,7 +34,7 @@ class BarContractTests(unittest.TestCase):
         returned = attach_bar_contract(frame, INVEZGO_H1_CONTRACT)
         self.assertIs(returned, frame)
         self.assertEqual(len(returned), 2)
-        self.assertEqual(read_bar_contract(returned).scheme, "invezgo_h1_v1")
+        self.assertEqual(read_bar_contract(returned).scheme, "invezgo_h1_live_v1")
 
 
 if __name__ == "__main__":

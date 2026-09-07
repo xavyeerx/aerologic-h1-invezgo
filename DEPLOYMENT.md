@@ -12,7 +12,7 @@ Bot jalan sebagai service `systemd` dari user VPS default `ubuntu`, dengan folde
 /home/ubuntu/aerologic-h1-invezgo
 ```
 
-Jadwal scanner diatur oleh `scheduler.py` dan berjalan satu menit setelah setiap bucket H1 Invezgo ditutup, termasuk bucket sesi pendek dan auction; weekend libur.
+Scheduler berjalan setiap 5 menit selama sesi IDX. Indikator dan trigger memakai latest H1 Invezgo, termasuk forming candle; weekend libur.
 
 ## 1. Push dari Lokal ke GitHub
 

@@ -86,7 +86,7 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         return {"skipped": True, "reason": "Outside trading hours"}
 
     logger.info("=" * 50)
-    logger.info("Starting aerologic H1 closed-candle scan")
+    logger.info("Starting aerologic H1 intrabar scan")
     logger.info("=" * 50)
     scan_t0 = time.perf_counter()
     state_manager.reset_daily_if_new_day()

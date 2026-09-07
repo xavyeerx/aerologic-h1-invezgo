@@ -18,12 +18,12 @@ class BarContract:
 
 
 INVEZGO_H1_CONTRACT = BarContract(
-    scheme="invezgo_h1_v1",
+    scheme="invezgo_h1_live_v1",
     timeframe="60m",
     reference_source="invezgo",
     parity_validated=True,
     signal_eligible=True,
-    reason="Invezgo multi-time chart; closed 60-minute exchange buckets only",
+    reason="Invezgo multi-time chart; latest forming 60-minute bucket is eligible",
 )
 
 INVEZGO_DAILY_CONTRACT = BarContract(

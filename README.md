@@ -1,6 +1,6 @@
 # aerologic
 
-aerologic adalah scanner saham Indonesia berbasis closed candle H1 untuk riset kuantitatif dan market intelligence. Bot menyaring kandidat melalui Invezgo, mengevaluasi keluarga sinyal pada bar 60 menit yang sudah selesai, menerapkan pengaman alert, lalu mengirim hasilnya ke Telegram.
+aerologic adalah scanner saham Indonesia berbasis H1 intrabar untuk riset kuantitatif dan market intelligence. Bot memindai setiap 5 menit dan mengizinkan forming candle 60 menit memicu sinyal sebelum close.
 
 > Alert adalah keluaran riset, bukan rekomendasi investasi. Validasi strategi, kualitas data, likuiditas, slippage, dan manajemen risiko tetap diperlukan sebelum mengambil keputusan.
 
@@ -11,13 +11,13 @@ Alur produksi saat ini:
 1. Scheduler menjalankan scan setiap lima menit selama jendela operasional WIB.
 2. Invezgo Screener memilih maksimal 50 kandidat berdasarkan aktivitas volume dan rata-rata nilai transaksi 20 hari.
 3. Kandidat dibagi ke lane `momentum` (maksimal 18), `constructive` (6), dan `reversal` (6).
-4. Bot mengambil OHLCV multi-timeframe `60` dari Invezgo untuk setiap kandidat dan membuang candle yang belum closed.
+4. Bot mengambil OHLCV multi-timeframe `60` dari Invezgo, termasuk forming candle terbaru.
 5. Scanner menghitung indikator, market regime, target, volume ratio, dan nilai transaksi harian.
 6. Kandidat dengan rata-rata nilai transaksi lima hari di bawah Rp5 miliar tidak diteruskan menjadi alert.
 7. ARB cooldown dan frequency gate menyaring sinyal yang tidak aman atau terlalu sering muncul.
 8. Alert yang lolos diklaim secara atomik, dicatat ke event log, dikirim ke Telegram, dan disimpan untuk evaluasi outcome.
 
-Harga, persentase perubahan, indikator, dan trigger alert seluruhnya berasal dari closed candle H1 yang sama. Harga realtime screener tidak dipakai untuk mengubah trigger teknikal.
+Harga, indikator, dan trigger alert berasal dari seri H1 Invezgo yang sama, termasuk forming candle. Sinyal intrabar dapat berubah sebelum candle close.
 
 ## Jenis Alert
 
@@ -180,7 +180,7 @@ Nilai default berada di `config/settings.py`; parameter operasional tertentu dap
 | `REVERSAL_MAX_RSI` | `35` | Maximum RSI Reversal Watch |
 | `REVERSAL_MIN_VOLUME_RATIO` | `1.5` | Minimum volume ratio Reversal Watch |
 
-Sumber data scanner produksi adalah Invezgo multi-timeframe dengan candle `60` menit. Timestamp endpoint diperlakukan sebagai label wall-clock bursa WIB dan hanya bar yang sudah selesai yang signal-eligible.
+Sumber data scanner produksi adalah Invezgo multi-timeframe `60` menit. Timestamp diperlakukan sebagai label wall-clock bursa WIB dan forming bar terbaru signal-eligible.
 
 ## State, Learning, dan Observability
 

@@ -205,6 +205,11 @@ def format_reversal_watch_message(results: List, *, total_count: int | None = No
         change = f"+{result.change_percent:.1f}%" if result.change_percent >= 0 else f"{result.change_percent:.1f}%"
         lines.append(f"<b>{ticker}</b> | {result.price:,.0f} ({change})")
         lines.append(
+            "Candle H1: CLOSED"
+            if getattr(result, "bar_closed", True)
+            else "Candle H1: LIVE (belum close)"
+        )
+        lines.append(
             f"   Return 20 bar {getattr(result, 'return20_pct', 0.0):+.1f}% | "
             f"RSI {getattr(result, 'rsi', 50.0):.1f} | {_format_volume_and_value(result)}"
         )
@@ -228,6 +233,10 @@ def _format_stock_header(result) -> str:
     return f"<b>{ticker} | {result.price:,.0f} ({change})</b>"
 
 
+def _format_h1_bar_status(result) -> str:
+    return "Candle H1: CLOSED" if getattr(result, "bar_closed", True) else "Candle H1: LIVE (belum close)"
+
+
 def format_bullish_break_message(
     results: List, *, total_count: int | None = None, part: int = 1
 ) -> str:
@@ -242,6 +251,7 @@ def format_bullish_break_message(
     for result in results:
         resistance = float(getattr(result, "supertrend_value", 0.0) or 0.0)
         lines.append(_format_stock_header(result))
+        lines.append(_format_h1_bar_status(result))
         lines.append(f"Resistance {resistance:,.0f} | {_format_volume_and_value(result)}")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
         lines.append(f"Sector: {_format_sector(result)}")
@@ -274,6 +284,7 @@ def format_strong_buy_message(
     ]
     for result in results:
         lines.append(_format_stock_header(result))
+        lines.append(_format_h1_bar_status(result))
         lines.append(f"Score {result.score} | {_format_volume_and_value(result)}")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
         lines.append(f"Sector: {_format_sector(result)}")
@@ -308,6 +319,7 @@ def format_early_entry_message(
     ]
     for result in sorted(results, key=lambda item: item.early_entry_strength, reverse=True):
         lines.append(_format_stock_header(result))
+        lines.append(_format_h1_bar_status(result))
         lines.append(
             f"Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
             f"{_format_volume_and_value(result)}"
@@ -413,7 +425,7 @@ def send_startup_message():
 {get_current_time_wib()}
 Build: <code>{SCANNER_BUILD_ID}</code>
 
-Schedule: one minute after every closed Invezgo H1 bucket.
+Schedule: every 5 minutes during IDX sessions; forming H1 bars are eligible.
 Alerts: Bullish Breakout H1, Strong Buy H1, Early Entry H1.
 --------------------------
 """

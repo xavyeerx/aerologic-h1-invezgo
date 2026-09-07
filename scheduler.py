@@ -1,7 +1,7 @@
 # ============================================
-# SCHEDULER - aerologic H1 (closed candles only)
+# SCHEDULER - aerologic H1 (5-minute intrabar signals)
 # ============================================
-# Runs one minute after each Invezgo H1 exchange bucket closes; weekend is off.
+# Runs every five minutes during IDX sessions; the forming H1 bar is eligible.
 
 import logging
 import logging.handlers
@@ -43,19 +43,7 @@ MORNING_SCAN_END = dtime(12, 0)
 AFTERNOON_SCAN_START = dtime(13, 31)
 FRIDAY_AFTERNOON_SCAN_START = dtime(14, 1)
 AFTERNOON_SCAN_END = dtime(16, 1)
-SCAN_INTERVAL_SECONDS = 60 * 60
-
-# One minute after each Invezgo exchange bucket closes. The irregular IDX lunch
-# break and closing auction mean these are intentionally not a simple cron */60.
-H1_CLOSE_SLOTS_MON_THU = (
-    dtime(9, 1), dtime(10, 1), dtime(11, 1), dtime(12, 1),
-    dtime(14, 1), dtime(15, 1), dtime(15, 51), dtime(16, 16),
-)
-H1_CLOSE_SLOTS_FRIDAY = (
-    dtime(9, 1), dtime(10, 1), dtime(11, 1), dtime(11, 31),
-    dtime(15, 1), dtime(15, 51), dtime(16, 16),
-)
-
+SCAN_INTERVAL_SECONDS = 5 * 60
 
 def _today_at(t: dtime, tz=WIB) -> datetime:
     return datetime.now(tz).replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
@@ -91,11 +79,21 @@ def smart_sleep_until(target: datetime, label: str) -> None:
 
 
 def scan_slots_for_day(now: datetime) -> list[datetime]:
-    labels = H1_CLOSE_SLOTS_FRIDAY if now.weekday() == 4 else H1_CLOSE_SLOTS_MON_THU
-    return [
-        now.replace(hour=value.hour, minute=value.minute, second=0, microsecond=0)
-        for value in labels
-    ]
+    session_ranges = (
+        ((dtime(9, 1), dtime(11, 31)), (dtime(14, 1), dtime(16, 16)))
+        if now.weekday() == 4
+        else ((dtime(9, 1), dtime(12, 1)), (dtime(13, 31), dtime(16, 16)))
+    )
+    slots: list[datetime] = []
+    for start, end in session_ranges:
+        cursor = now.replace(hour=start.hour, minute=start.minute, second=0, microsecond=0)
+        stop = now.replace(hour=end.hour, minute=end.minute, second=0, microsecond=0)
+        while cursor <= stop:
+            slots.append(cursor)
+            cursor += timedelta(seconds=SCAN_INTERVAL_SECONDS)
+        if slots[-1] < stop:
+            slots.append(stop)
+    return slots
 
 
 def next_scan_slot(now: datetime) -> datetime | None:
@@ -152,7 +150,7 @@ def main() -> None:
     logger.info("=" * 50)
     logger.info("aerologic H1 scheduler")
     logger.info("Build: %s", SCANNER_BUILD_ID)
-    logger.info("Scan satu menit setelah setiap candle Invezgo H1 ditutup")
+    logger.info("Scan tiap 5 menit; indikator memakai latest H1 termasuk forming candle")
     logger.info("=" * 50)
 
     state_manager = StateManager()
@@ -172,7 +170,7 @@ def main() -> None:
             # mengembalikan slot masa depan, bukan slot yang baru saja tiba.
             now = datetime.now(WIB)
             elapsed = (now - target).total_seconds()
-            slot_window = 5 * 60  # do not process a stale close much later
+            slot_window = SCAN_INTERVAL_SECONDS - 5
 
             if target != last_scan_slot and elapsed < slot_window:
                 last_scan_slot = target

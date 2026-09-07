@@ -7,10 +7,10 @@
 - Parsed timestamps retain `Asia/Jakarta` exchange labels and do not collapse to one
   row per date.
 - Latest live sample produced a finite Supertrend value and direction.
-- Incomplete current H1 bars are excluded by an automated test.
+- Forming H1 bars are retained for live signals; closed-only research mode is tested separately.
 - Scheduler slots cover irregular Monday-Thursday and Friday IDX buckets.
 - Daily legacy bars are rejected by the production signal eligibility gate.
-- Automated suite: 52 tests and 4 subtests passed at migration time, including the
+- Automated suite: 53 tests and 4 subtests passed at migration time, including the
   TradingView-compatible first-ATR-bar Supertrend initialization contract.
 
 ## Not yet proven
