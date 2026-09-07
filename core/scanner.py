@@ -147,6 +147,24 @@ def _is_bullish_supertrend_break(df: pd.DataFrame, current_price: float) -> bool
     return current_price >= _next_idx_price_above(break_line)
 
 
+def _is_live_bullish_supertrend_break(df: pd.DataFrame, current_price: float) -> bool:
+    """Detect a realtime cross when the H1 history endpoint is one session behind."""
+    if df.empty or current_price <= 0:
+        return False
+    latest = df.iloc[-1]
+    if int(latest.get("direction", 0) or 0) != -1:
+        return False
+    previous_close = float(latest.get("close", 0.0) or 0.0)
+    resistance = float(
+        latest.get("st_upper_band", latest.get("supertrend", 0.0)) or 0.0
+    )
+    return (
+        resistance > 0
+        and previous_close <= resistance
+        and current_price >= _next_idx_price_above(resistance)
+    )
+
+
 def _is_bullish_supertrend_bounce(df: pd.DataFrame, current_price: float) -> bool:
     """Detect a one-tick reclaim after testing an established bullish ST line."""
     if len(df) < 2 or current_price <= 0:
@@ -252,8 +270,21 @@ def analyze_stock(
         result.change_percent = compute_session_change_percent(df, ticker)
         result.score, result.status, result.status_emoji = calculate_total_score(df)
 
-        # The live H1 chart close is authoritative; do not mix another quote feed.
-        result.is_bullish_break = _is_bullish_supertrend_break(df, result.price)
+        live_quote_used = False
+        if screener_price:
+            live_close = float(screener_price.get("close") or 0.0)
+            if live_close > 0:
+                result.price = live_close
+                result.change_percent = float(screener_price.get("change_pct") or 0.0)
+                result.bar_closed = False
+                result.bar_timestamp = (now or datetime.now(WIB)).isoformat()
+                live_quote_used = True
+
+        result.is_bullish_break = (
+            _is_live_bullish_supertrend_break(df, result.price)
+            if live_quote_used
+            else _is_bullish_supertrend_break(df, result.price)
+        )
         result.is_supertrend_flip = result.is_bullish_break
         result.is_supertrend_bounce = _is_bullish_supertrend_bounce(df, result.price)
 

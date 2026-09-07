@@ -21,7 +21,11 @@ for bar close.
 
 ## Indicator semantics
 
-- Supertrend uses TradingView-compatible Wilder RMA ATR, period 10, multiplier 2.
+- Supertrend uses TradingView-compatible Wilder RMA ATR, period 10, multiplier 3.
+- Invezgo pre-open (`08:xx`) and closing-auction (`16:xx`) buckets are excluded
+  from indicator history to match TradingView's IDX regular-session H1 bars.
+- Because multi-time history is EOD-delayed, the realtime screener close is used
+  only to evaluate a live cross against the last regular-H1 Supertrend resistance.
 - Initialization is at ATR bar `period - 1`, initially on the bearish upper band,
   matching `ta.supertrend`; project direction uses `+1` bullish and `-1` bearish.
 - `return20_pct` means 20 H1 bars, and market momentum means five H1 bars.

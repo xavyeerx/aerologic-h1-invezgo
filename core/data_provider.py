@@ -292,6 +292,9 @@ def _rows_to_h1_ohlc_df(
     df.index = labels.dt.tz_localize(WIB)
     df = df.drop(columns=["date"])[["open", "high", "low", "close", "volume"]]
     df = df[~df.index.duplicated(keep="last")].sort_index().dropna(subset=["close"])
+    # TradingView IDX regular-session H1 excludes Invezgo's 08:xx pre-open and
+    # 16:xx closing-auction buckets. Including them changes ATR and Supertrend.
+    df = df[~df.index.hour.isin({8, 16})]
 
     from .market_session import is_h1_bar_closed
     reference = now or datetime.now(WIB)

@@ -53,9 +53,9 @@ MACD_SIGNAL = 9
 MOMENTUM_PERIOD = 10
 PIVOT_LOOKBACK = 10
 
-# Supertrend — TradingView-compatible (RMA ATR, period=10, multiplier=2)
+# Supertrend — matches the TradingView chart configuration (10, 3)
 SUPERTREND_PERIOD = 10
-SUPERTREND_MULTIPLIER = 2.0
+SUPERTREND_MULTIPLIER = 3.0
 
 # H1 signal engine thresholds. Migration defaults require forward validation.
 CONTINUATION_MIN_RETURN20 = float(os.getenv("CONTINUATION_MIN_RETURN20", "5.0"))

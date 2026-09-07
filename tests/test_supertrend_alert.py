@@ -9,6 +9,7 @@ from core.scanner import (
     _idx_tick_size,
     _next_idx_price_above,
     _is_bullish_supertrend_break,
+    _is_live_bullish_supertrend_break,
     _is_bullish_supertrend_bounce,
     _is_strong_buy,
     filter_signals,
@@ -59,6 +60,18 @@ class SupertrendBreakTests(unittest.TestCase):
             }
         )
         self.assertFalse(_is_bullish_supertrend_break(frame, 515.0))
+
+    def test_live_break_requires_last_regular_h1_bar_to_be_bearish(self):
+        mncn = pd.DataFrame({
+            "close": [202.0], "direction": [-1],
+            "supertrend": [204.0], "st_upper_band": [204.0],
+        })
+        rsch = pd.DataFrame({
+            "close": [398.0], "direction": [1],
+            "supertrend": [365.0], "st_upper_band": [390.0],
+        })
+        self.assertTrue(_is_live_bullish_supertrend_break(mncn, 208.0))
+        self.assertFalse(_is_live_bullish_supertrend_break(rsch, 428.0))
 
     def test_bullish_break_is_not_blocked_by_other_signal_liquidity_gate(self):
         result = SimpleNamespace(

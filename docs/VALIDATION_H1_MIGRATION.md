@@ -10,7 +10,7 @@
 - Forming H1 bars are retained for live signals; closed-only research mode is tested separately.
 - Scheduler slots cover irregular Monday-Thursday and Friday IDX buckets.
 - Daily legacy bars are rejected by the production signal eligibility gate.
-- Automated suite: 53 tests and 4 subtests passed at migration time, including the
+- Automated suite: 54 tests and 4 subtests passed at migration time, including the
   TradingView-compatible first-ATR-bar Supertrend initialization contract.
 
 ## Not yet proven
@@ -21,4 +21,11 @@
 - The weekday gate does not yet consume an official IDX holiday calendar.
 
 These unknowns affect strategy validity and exact cross-provider parity, but not the
-verified ability to fetch, preserve, close-gate, and calculate Supertrend on H1 bars.
+verified ability to fetch, preserve, session-filter, and calculate Supertrend on H1 bars.
+
+## Realtime classification fixture
+
+Using the 2026-09-07 observations supplied by the operator and the preceding regular
+H1 history, MNCN at 208 crosses its 204.895 resistance and classifies as Bullish
+Breakout. RSCH at 428 remains an established bullish trend and does not classify as a
+fresh breakout.
