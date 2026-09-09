@@ -10,7 +10,7 @@ from core.scanner import (
     _next_idx_price_above,
     _is_bullish_supertrend_break,
     _is_live_bullish_supertrend_break,
-    _is_bullish_supertrend_bounce,
+    _has_bullish_supertrend_confirmation,
     _is_strong_buy,
     filter_signals,
 )
@@ -84,51 +84,43 @@ class SupertrendBreakTests(unittest.TestCase):
         self.assertEqual(filter_signals({"TEST": result})["bullish_break"], [result])
 
 
-class SupertrendBounceTests(unittest.TestCase):
-    def test_one_tick_reclaim_from_bullish_line_is_strong_buy_input(self):
+class SupertrendConfirmationTests(unittest.TestCase):
+    def test_latest_two_bars_confirm_bullish_supertrend(self):
         frame = pd.DataFrame(
             {
-                "direction": [1, 1],
-                "low": [152.0, 150.0],
-                "supertrend": [149.0, 150.0],
-                "st_lower_band": [149.0, 150.0],
+                "direction": [-1, 1, 1],
             }
         )
-        self.assertTrue(_is_bullish_supertrend_bounce(frame, 151.0))
-        self.assertTrue(_is_strong_buy(False, True, 5.0))
+        self.assertTrue(_has_bullish_supertrend_confirmation(frame))
 
-    def test_price_on_line_has_not_reclaimed_one_tick(self):
+    def test_one_bullish_bar_is_not_enough(self):
         frame = pd.DataFrame(
             {
-                "direction": [1, 1],
-                "low": [152.0, 150.0],
-                "supertrend": [149.0, 150.0],
-                "st_lower_band": [149.0, 150.0],
+                "direction": [-1, -1, 1],
             }
         )
-        self.assertFalse(_is_bullish_supertrend_bounce(frame, 150.0))
+        self.assertFalse(_has_bullish_supertrend_confirmation(frame))
 
-    def test_no_bounce_when_price_never_tested_the_line(self):
-        frame = pd.DataFrame(
-            {
-                "direction": [1, 1],
-                "low": [160.0, 155.0],
-                "supertrend": [149.0, 150.0],
-                "st_lower_band": [149.0, 150.0],
-            }
-        )
-        self.assertFalse(_is_bullish_supertrend_bounce(frame, 160.0))
+class StrongBuyRuleTests(unittest.TestCase):
+    def test_bull_market_ignores_stoch_filter(self):
+        self.assertTrue(_is_strong_buy(True, 12.0, "BULL", 90.0, 10.0))
 
+    def test_zero_and_negative_change_are_rejected(self):
+        self.assertFalse(_is_strong_buy(True, 0.0, "BULL", 20.0, 10.0))
+        self.assertFalse(_is_strong_buy(True, -0.01, "BULL", 20.0, 10.0))
 
-class StrongBuyCapTests(unittest.TestCase):
-    def test_ten_percent_is_allowed(self):
-        self.assertTrue(_is_strong_buy(True, False, 10.0))
+    def test_more_than_twelve_percent_is_rejected(self):
+        self.assertFalse(_is_strong_buy(True, 12.01, "BULL", 20.0, 10.0))
 
-    def test_more_than_ten_percent_is_rejected(self):
-        self.assertFalse(_is_strong_buy(True, False, 10.01))
+    def test_sideways_and_bear_require_stoch_below_sixty_and_k_above_d(self):
+        for regime in ("SIDEWAYS", "BEAR"):
+            with self.subTest(regime=regime):
+                self.assertTrue(_is_strong_buy(True, 5.0, regime, 59.0, 50.0))
+                self.assertFalse(_is_strong_buy(True, 5.0, regime, 60.0, 50.0))
+                self.assertFalse(_is_strong_buy(True, 5.0, regime, 50.0, 50.0))
 
-    def test_bounce_above_ten_percent_is_also_rejected(self):
-        self.assertFalse(_is_strong_buy(False, True, 10.01))
+    def test_two_bar_confirmation_is_mandatory(self):
+        self.assertFalse(_is_strong_buy(False, 5.0, "BULL", 20.0, 10.0))
 
     def test_reversal_watch_alert_is_disabled(self):
         result = SimpleNamespace(

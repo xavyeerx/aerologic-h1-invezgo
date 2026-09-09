@@ -94,15 +94,27 @@ def signal_snapshot(scan_result, signal_type: str, regime_info: dict) -> dict[st
     fields: Iterable[str] = (
         "price", "change_percent", "score", "volume_ratio", "adx", "stoch_k",
         "stoch_d", "supertrend_value", "is_supertrend_flip", "is_bullish_break",
-        "is_supertrend_bounce", "is_st_continuation",
+        "is_st_continuation",
         "is_counter_trend", "is_bullish_engulfing", "is_price_breakout", "atr_pct",
         "tp1", "tp2", "tp2_source", "support", "resistance",
     )
     settings = __import__("config.settings", fromlist=["SCANNER_BUILD_ID"])
+    setup_families = {
+        "bullish_break": "SUPERTREND_BREAK",
+        "strong_buy": "SUPERTREND_CONFIRMATION",
+        "early_entry": "HEALTHY_CORRECTION",
+        "reversal_watch": "SELLING_CLIMAX_REVERSAL",
+    }
+    formula_versions = {
+        "strong_buy": "strong_buy_supertrend_v2",
+    }
     return {
         "signal_type": signal_type,
-        "setup_family": "REVERSAL" if getattr(scan_result, "is_counter_trend", False) else "CONTINUATION",
-        "mode": "PRODUCTION", "formula_version": "risk_aware_v1_shadow_pending",
+        "setup_family": setup_families.get(
+            signal_type, getattr(scan_result, "signal_family", "NONE")
+        ),
+        "mode": "PRODUCTION",
+        "formula_version": formula_versions.get(signal_type, "h1_intrabar_v1"),
         "build_id": settings.SCANNER_BUILD_ID,
         "timeframe": "H1",
         "bar_timestamp": getattr(scan_result, "bar_timestamp", None),

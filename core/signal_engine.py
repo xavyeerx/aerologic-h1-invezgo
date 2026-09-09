@@ -19,23 +19,6 @@ class SignalFeatures:
     lower_wick_fraction: float
 
 
-def is_momentum_expansion(
-    f: SignalFeatures,
-    *,
-    min_return20: float,
-    min_volume_ratio: float,
-) -> bool:
-    return (
-        f.market_regime.upper() in {"BULL", "SIDEWAYS"}
-        and f.close > f.ema20 > f.ema50
-        and f.return20_pct >= min_return20
-        and f.volume_ratio >= min_volume_ratio
-        and f.close_location >= 0.65
-        and f.body_fraction >= 0.25
-        and f.upper_wick_fraction <= 0.30
-    )
-
-
 def is_selling_climax_reversal(
     f: SignalFeatures,
     *,

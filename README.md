@@ -10,7 +10,7 @@ Alur produksi saat ini:
 
 1. Scheduler menjalankan scan setiap lima menit selama jendela operasional WIB.
 2. Invezgo Screener memilih maksimal 50 kandidat berdasarkan aktivitas volume dan rata-rata nilai transaksi 20 hari.
-3. Kandidat dibagi ke lane `momentum` (maksimal 18), `constructive` (6), dan `reversal` (6).
+3. Kandidat dideduplikasi, diurutkan berdasarkan rasio aktivitas volume, lalu dibatasi maksimal 50 saham tanpa pembagian lane.
 4. Bot mengambil OHLCV multi-timeframe `60` dari Invezgo, termasuk forming candle terbaru.
 5. Scanner menghitung indikator, market regime, target, volume ratio, dan nilai transaksi harian.
 6. Kandidat dengan rata-rata nilai transaksi lima hari di bawah Rp5 miliar tidak diteruskan menjadi alert.
@@ -23,15 +23,19 @@ Harga, indikator, dan trigger alert berasal dari seri H1 Invezgo yang sama, term
 
 ### Strong Buy H1
 
-Keluarga sinyal `MOMENTUM_EXPANSION`. Kondisi utamanya:
+Keluarga sinyal `SUPERTREND_CONFIRMATION`. Kondisi utamanya:
 
-- market regime `BULL` atau `SIDEWAYS`;
-- `close > EMA20 > EMA50`;
-- return 20 bar minimal 5%;
-- volume ratio minimal 1,2x;
-- candle ditutup dekat high, body cukup kuat, dan upper wick terbatas.
+- dua candle H1 terakhir berturut-turut berada pada arah Supertrend bullish;
+- candle kedua adalah candle terbaru dan boleh masih forming;
+- perubahan sesi harus positif dan maksimal 12%;
+- pada market regime `SIDEWAYS` atau `BEAR`, Stoch RSI wajib `K < 60` dan `K > D`;
+- pada market regime `BULL`, Stoch RSI tidak menjadi filter;
+- rata-rata nilai transaksi lima hari minimal Rp5 miliar.
 
-Ambang return dan volume dapat dioverride melalui environment variable.
+Strong Buy tidak lagi menggunakan Supertrend bounce, EMA alignment, return 20 bar,
+anatomi candle, atau minimum volume ratio H1. Aktivitas volume kandidat sudah disaring
+oleh Invezgo Screener, sedangkan liquidity gate lima hari tetap dipertahankan. Karena
+candle terbaru dapat masih forming, konfirmasi kedua dapat berubah sebelum H1 close.
 
 ### Early Entry H1
 
@@ -53,7 +57,7 @@ Alert ini merupakan watchlist berisiko tinggi dan membutuhkan follow-through.
 Pembatas berlaku per ticker dan lintas seluruh jenis alert:
 
 - satu ticker hanya dapat dikirim sekali pada tanggal yang sama;
-- maksimal tiga call dalam rolling window 14 hari kalender;
+- maksimal dua call dalam rolling window 14 hari kalender;
 - maksimal dua sesi bursa berturut-turut—call pada sesi ketiga diblokir;
 - `PACK`, `pack`, dan `PACK.JK` dianggap ticker yang sama;
 - jika call sesi sebelumnya diikuti penurunan minimal 13%, ticker masuk ARB cooldown sampai muncul candle hijau.
@@ -174,8 +178,8 @@ Nilai default berada di `config/settings.py`; parameter operasional tertentu dap
 | `INVEZGO_QUOTA_WARN_PCT` | `90` | Ambang peringatan kuota |
 | `INVEZGO_QUOTA_BREAK_PCT` | `95` | Ambang penghentian fetch chart |
 | `SCREEN_VOLUME_MIN_FACTOR` | `0.005` | Floor faktor volume screener |
-| `CONTINUATION_MIN_RETURN20` | `5.0` | Minimum return Strong Buy |
-| `CONTINUATION_MIN_VOLUME_RATIO` | `1.2` | Minimum volume ratio Strong Buy |
+| `STRONG_BUY_MAX_CHANGE_PCT` | `12.0` | Batas maksimum perubahan sesi Strong Buy |
+| `STRONG_BUY_STOCH_RSI_MAX` | `60.0` | Batas eksklusif Stoch RSI K pada regime Sideways/Bear |
 | `REVERSAL_MAX_RETURN20` | `-8.0` | Maximum return Reversal Watch |
 | `REVERSAL_MAX_RSI` | `35` | Maximum RSI Reversal Watch |
 | `REVERSAL_MIN_VOLUME_RATIO` | `1.5` | Minimum volume ratio Reversal Watch |

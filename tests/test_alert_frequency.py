@@ -12,21 +12,21 @@ from database.state_manager import (
 
 
 class AlertFrequencyRuleTests(unittest.TestCase):
-    def test_fourth_call_inside_fourteen_calendar_days_is_blocked(self):
+    def test_third_call_inside_fourteen_calendar_days_is_blocked(self):
         on_date = date(2026, 8, 31)
         allowed, reason = evaluate_alert_frequency(
-            ["2026-08-18", "2026-08-22", "2026-08-27"], on_date
+            ["2026-08-22", "2026-08-27"], on_date
         )
         self.assertFalse(allowed)
-        self.assertIn("3x dalam 14 hari", reason)
+        self.assertIn("2x dalam 14 hari", reason)
 
     def test_call_before_fourteen_day_window_does_not_count(self):
         allowed, _ = evaluate_alert_frequency(
-            ["2026-08-17", "2026-08-22", "2026-08-27"], date(2026, 8, 31)
+            ["2026-08-17", "2026-08-27"], date(2026, 8, 31)
         )
         self.assertTrue(allowed)
 
-    def test_third_consecutive_trading_session_is_blocked(self):
+    def test_third_consecutive_trading_session_is_blocked_by_two_call_cap(self):
         monday = date(2026, 8, 31)
         previous = _previous_weekday(monday)
         two_sessions_ago = _previous_weekday(previous)
@@ -34,7 +34,7 @@ class AlertFrequencyRuleTests(unittest.TestCase):
             [two_sessions_ago.isoformat(), previous.isoformat()], monday
         )
         self.assertFalse(allowed)
-        self.assertIn("2 sesi bursa berturut-turut", reason)
+        self.assertIn("2x dalam 14 hari", reason)
 
     def test_second_consecutive_trading_session_is_allowed(self):
         on_date = date(2026, 9, 1)

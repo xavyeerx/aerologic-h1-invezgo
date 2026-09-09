@@ -16,7 +16,6 @@ WIB = pytz.timezone("Asia/Jakarta")
 
 MAX_CANDIDATES = 50
 MIN_AVG_VALUE_20 = 5_000_000_000
-LANE_CAPS = {"momentum": 30, "constructive": 10, "reversal": 10}
 SCREEN_VOLUME_MIN_FACTOR = float(os.getenv("SCREEN_VOLUME_MIN_FACTOR", "0.005"))
 
 
@@ -115,16 +114,8 @@ def _volume_ratio(row: dict) -> float:
         return 0.0
 
 
-def _lane_for(row: dict) -> str:
-    change_pct = _number(row, "change_pct")
-    if change_pct >= 1.0:
-        return "momentum"
-    if change_pct >= 0.0:
-        return "constructive"
-    return "reversal"
-
-
-def allocate_candidate_lanes(rows: list[dict], max_candidates: int = MAX_CANDIDATES) -> list[dict]:
+def select_candidates(rows: list[dict], max_candidates: int = MAX_CANDIDATES) -> list[dict]:
+    """Deduplicate and rank screener results without setup-specific reservations."""
     unique: dict[str, dict] = {}
     for original in rows:
         code = str(original.get("code") or "").strip().upper()
@@ -132,7 +123,6 @@ def allocate_candidate_lanes(rows: list[dict], max_candidates: int = MAX_CANDIDA
             continue
         candidate = dict(original)
         candidate["code"] = code
-        candidate["lane"] = _lane_for(candidate)
         candidate["activity_ratio"] = _volume_ratio(candidate)
         previous = unique.get(code)
         if previous is None or candidate["activity_ratio"] > previous["activity_ratio"]:
@@ -142,20 +132,7 @@ def allocate_candidate_lanes(rows: list[dict], max_candidates: int = MAX_CANDIDA
         unique.values(),
         key=lambda row: (-row["activity_ratio"], -_number(row, "value"), row["code"]),
     )
-    selected: list[dict] = []
-    selected_codes: set[str] = set()
-    for lane, cap in LANE_CAPS.items():
-        for candidate in [row for row in ordered if row["lane"] == lane][:cap]:
-            selected.append(candidate)
-            selected_codes.add(candidate["code"])
-
-    for candidate in ordered:
-        if len(selected) >= max_candidates:
-            break
-        if candidate["code"] not in selected_codes:
-            selected.append(candidate)
-            selected_codes.add(candidate["code"])
-    return selected[:max_candidates]
+    return ordered[:max_candidates]
 
 
 def get_candidates(now: Optional[datetime] = None) -> tuple[list[str], ScreenWindow, dict]:
@@ -172,7 +149,7 @@ def get_candidates(now: Optional[datetime] = None) -> tuple[list[str], ScreenWin
     rows = run_screener(formula)
     logger.info("Screener [%s]: %d kandidat lolos", win.label, len(rows))
 
-    picked = allocate_candidate_lanes(rows, MAX_CANDIDATES)
+    picked = select_candidates(rows, MAX_CANDIDATES)
     codes = [row["code"] for row in picked if row.get("code")]
     dropped = max(0, len(rows) - len(codes))
     logger.info(
@@ -182,13 +159,6 @@ def get_candidates(now: Optional[datetime] = None) -> tuple[list[str], ScreenWin
         len(codes),
         dropped,
     )
-    logger.info(
-        "[LANES] momentum=%d constructive=%d reversal=%d",
-        sum(row["lane"] == "momentum" for row in picked),
-        sum(row["lane"] == "constructive" for row in picked),
-        sum(row["lane"] == "reversal" for row in picked),
-    )
-
     # Kumpulkan harga realtime dari response screener untuk setiap kandidat.
     # Field 'close' dan 'change_pct' sengaja direferensikan di formula agar
     # dikembalikan oleh Invezgo dan bisa dipakai sebagai snapshot intraday.

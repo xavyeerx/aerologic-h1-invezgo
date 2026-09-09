@@ -1,6 +1,6 @@
 import unittest
 
-from core.screener import ScreenWindow, allocate_candidate_lanes, build_formula
+from core.screener import ScreenWindow, build_formula, select_candidates
 
 
 def candidate(code, change_pct, ratio):
@@ -24,23 +24,21 @@ class ScreenerLaneTests(unittest.TestCase):
         self.assertNotIn("change_pct < 15", formula)
         self.assertNotIn(" && value > 5000000000", formula)
 
-    def test_lane_reservations_prevent_all_momentum_selection(self):
+    def test_candidates_are_ranked_without_lane_reservations(self):
         rows = [candidate(f"M{i:02}", 2.0, 100 - i) for i in range(40)]
         rows += [candidate(f"C{i:02}", 0.5, 30 - i) for i in range(15)]
         rows += [candidate(f"R{i:02}", -2.0, 15 - i) for i in range(15)]
-        picked = allocate_candidate_lanes(rows)
-        counts = {
-            lane: sum(row["lane"] == lane for row in picked)
-            for lane in ("momentum", "constructive", "reversal")
-        }
+        picked = select_candidates(rows)
         self.assertEqual(len(picked), 50)
-        self.assertGreaterEqual(counts["constructive"], 10)
-        self.assertGreaterEqual(counts["reversal"], 10)
-        self.assertLessEqual(counts["momentum"], 30)
+        self.assertNotIn("lane", picked[0])
+        self.assertEqual(
+            [row["activity_ratio"] for row in picked],
+            sorted((row["activity_ratio"] for row in picked), reverse=True),
+        )
 
     def test_duplicate_ticker_is_fetched_once_using_best_activity(self):
         rows = [candidate("BBCA", 2.0, 1.2), candidate("bbca", 2.0, 2.5)]
-        picked = allocate_candidate_lanes(rows)
+        picked = select_candidates(rows)
         self.assertEqual([row["code"] for row in picked], ["BBCA"])
         self.assertAlmostEqual(picked[0]["activity_ratio"], 2.5)
 

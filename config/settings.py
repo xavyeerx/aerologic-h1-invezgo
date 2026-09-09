@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260907-h1-migration"
+SCANNER_BUILD_ID = "20260909-strong-buy-st-v2"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -58,9 +58,8 @@ SUPERTREND_PERIOD = 10
 SUPERTREND_MULTIPLIER = 3.0
 
 # H1 signal engine thresholds. Migration defaults require forward validation.
-CONTINUATION_MIN_RETURN20 = float(os.getenv("CONTINUATION_MIN_RETURN20", "5.0"))
-CONTINUATION_MIN_VOLUME_RATIO = float(os.getenv("CONTINUATION_MIN_VOLUME_RATIO", "1.2"))
-STRONG_BUY_MAX_CHANGE_PCT = float(os.getenv("STRONG_BUY_MAX_CHANGE_PCT", "10.0"))
+STRONG_BUY_MAX_CHANGE_PCT = float(os.getenv("STRONG_BUY_MAX_CHANGE_PCT", "12.0"))
+STRONG_BUY_STOCH_RSI_MAX = float(os.getenv("STRONG_BUY_STOCH_RSI_MAX", "60.0"))
 REVERSAL_MAX_RETURN20 = float(os.getenv("REVERSAL_MAX_RETURN20", "-8.0"))
 REVERSAL_MAX_RSI = float(os.getenv("REVERSAL_MAX_RSI", "35"))
 REVERSAL_MIN_VOLUME_RATIO = float(os.getenv("REVERSAL_MIN_VOLUME_RATIO", "1.5"))

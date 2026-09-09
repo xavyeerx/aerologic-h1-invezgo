@@ -17,7 +17,6 @@ from .indicators import calculate_all_indicators
 from .scoring import calculate_total_score
 from .signal_engine import (
     SignalFeatures,
-    is_momentum_expansion,
     is_selling_climax_reversal,
 )
 
@@ -42,7 +41,6 @@ class ScanResult:
         self.early_entry_strength = 0
         self.correction_percent = 0.0
         self.is_bullish = False
-        self.is_momentum_expansion = False
         self.signal_family = "NONE"
         self.tp1 = 0.0
         self.tp2 = 0.0
@@ -70,7 +68,6 @@ class ScanResult:
         self.is_counter_trend = False
         self.is_supertrend_flip = False
         self.is_bullish_break = False
-        self.is_supertrend_bounce = False
         self.supertrend_value = 0.0
         self.supertrend_support = 0.0
         self.is_st_continuation = False
@@ -165,37 +162,25 @@ def _is_live_bullish_supertrend_break(df: pd.DataFrame, current_price: float) ->
     )
 
 
-def _is_bullish_supertrend_bounce(df: pd.DataFrame, current_price: float) -> bool:
-    """Detect a one-tick reclaim after testing an established bullish ST line."""
-    if len(df) < 2 or current_price <= 0:
+def _has_bullish_supertrend_confirmation(df: pd.DataFrame, bars: int = 2) -> bool:
+    """Require consecutive bullish Supertrend bars, including the latest forming bar."""
+    if len(df) < bars:
         return False
-    previous = df.iloc[-2]
-    latest = df.iloc[-1]
-    if int(previous.get("direction", 0) or 0) != 1:
-        return False
-    if int(latest.get("direction", 0) or 0) != 1:
-        return False
-    bullish_line = float(
-        latest.get("st_lower_band", latest.get("supertrend", 0.0)) or 0.0
-    )
-    latest_low = float(latest.get("low", 0.0) or 0.0)
-    if bullish_line <= 0 or latest_low <= 0:
-        return False
-    trigger_price = _next_idx_price_above(bullish_line)
-    tested_line = latest_low <= trigger_price
-    reclaimed_one_tick = current_price >= trigger_price
-    return tested_line and reclaimed_one_tick
+    return all(int(value or 0) == 1 for value in df["direction"].iloc[-bars:])
 
 
 def _is_strong_buy(
-    momentum_expansion: bool,
-    supertrend_bounce: bool,
+    supertrend_confirmed: bool,
     change_percent: float,
+    market_regime: str,
+    stoch_k: float,
+    stoch_d: float,
 ) -> bool:
-    return bool(
-        (momentum_expansion or supertrend_bounce)
-        and change_percent <= STRONG_BUY_MAX_CHANGE_PCT
-    )
+    if not supertrend_confirmed or not 0 < change_percent <= STRONG_BUY_MAX_CHANGE_PCT:
+        return False
+    if market_regime.upper() in {"SIDEWAYS", "BEAR"}:
+        return stoch_k < STRONG_BUY_STOCH_RSI_MAX and stoch_k > stoch_d
+    return True
 
 
 def analyze_stock(
@@ -286,7 +271,7 @@ def analyze_stock(
             else _is_bullish_supertrend_break(df, result.price)
         )
         result.is_supertrend_flip = result.is_bullish_break
-        result.is_supertrend_bounce = _is_bullish_supertrend_bounce(df, result.price)
+        result.is_st_continuation = _has_bullish_supertrend_confirmation(df)
 
         candle_close = result.price
         close20 = float(df["close"].iloc[-21]) if len(df) >= 21 else 0.0
@@ -314,11 +299,6 @@ def analyze_stock(
             lower_wick_fraction=lower_wick_fraction,
         )
 
-        result.is_momentum_expansion = is_momentum_expansion(
-            signal_features,
-            min_return20=CONTINUATION_MIN_RETURN20,
-            min_volume_ratio=CONTINUATION_MIN_VOLUME_RATIO,
-        )
         result.is_reversal_watch = is_selling_climax_reversal(
             signal_features,
             max_return20=REVERSAL_MAX_RETURN20,
@@ -326,15 +306,15 @@ def analyze_stock(
             min_volume_ratio=REVERSAL_MIN_VOLUME_RATIO,
         )
         result.is_strong_buy = _is_strong_buy(
-            result.is_momentum_expansion,
-            result.is_supertrend_bounce,
+            result.is_st_continuation,
             result.change_percent,
+            result.market_regime,
+            result.stoch_k,
+            result.stoch_d,
         )
         result.signal_family = (
-            "SUPERTREND_BOUNCE"
-            if result.is_supertrend_bounce
-            else "MOMENTUM_EXPANSION"
-            if result.is_momentum_expansion
+            "SUPERTREND_CONFIRMATION"
+            if result.is_strong_buy
             else "SELLING_CLIMAX_REVERSAL"
             if result.is_reversal_watch
             else "NONE"

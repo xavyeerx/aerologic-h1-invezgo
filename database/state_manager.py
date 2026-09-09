@@ -18,7 +18,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 ALERT_LOOKBACK_DAYS = 14
-ALERT_MAX_CALLS = 3
+ALERT_MAX_CALLS = 2
 ALERT_MAX_CONSECUTIVE_SESSIONS = 2
 ALERT_CATEGORIES = ("bullish_break", "strong_buy", "early_entry", "reversal_watch")
 
