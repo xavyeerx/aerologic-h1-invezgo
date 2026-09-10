@@ -96,7 +96,7 @@ def track_signal(scan_result, signal_type_key: str, regime_info: dict) -> bool:
         r = scan_result
         signal_type_db = _SIGNAL_TYPE_MAP.get(signal_type_key, signal_type_key.upper())
         entry_price    = _safe_float(r.price)
-        sl_price       = round(entry_price * 0.95, 2)
+        sl_price       = _safe_float(getattr(r, 'sl', 0)) or round(entry_price * 0.95, 2)
 
         # Ambil prev outcome untuk ticker ini
         prev_outcome = _get_prev_outcome(conn, r.ticker)

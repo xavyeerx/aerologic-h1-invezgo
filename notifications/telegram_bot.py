@@ -7,12 +7,10 @@ import pytz
 import requests
 
 from config.settings import (
-    SCANNER_BUILD_ID,
     SIGNAL_API_ENABLED,
     SIGNAL_API_URL,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
-    TELEGRAM_TEST_CHAT_ID,
     TELEGRAM_SCANNER_TOPIC_ID,
 )
 
@@ -20,6 +18,7 @@ logger = logging.getLogger(__name__)
 WIB = pytz.timezone("Asia/Jakarta")
 TELEGRAM_MAX_CHARS = 3800
 ALERT_FOOTER = "<i>Powered by Aerologic</i>"
+ALERT_DISCLAIMER = "<i>DYOR. Bukan rekomendasi beli atau jual. Risiko di tangan masing-masing.</i>"
 
 
 def get_current_time_wib() -> str:
@@ -43,7 +42,7 @@ def _format_volume_and_value(result) -> str:
 
 
 def _append_alert_footer(lines: List[str]) -> None:
-    lines.extend(["", ALERT_FOOTER])
+    lines.extend(["", ALERT_DISCLAIMER, ALERT_FOOTER])
 
 def send_telegram_message(
     message: str,
@@ -91,8 +90,21 @@ def _format_tp_info(result, *, spaced_labels: bool = False) -> str:
         lines.append(f"{tp1_label}: {result.tp1:,.0f} (+{tp1_pct:.1f}%)")
     if getattr(result, "tp2", 0) > result.price:
         tp2_pct = ((result.tp2 - result.price) / result.price) * 100
-        source = getattr(result, "tp2_source", "ATR")
-        lines.append(f"{tp2_label}: {result.tp2:,.0f} (+{tp2_pct:.1f}%) {source}")
+        lines.append(f"{tp2_label}: {result.tp2:,.0f} (+{tp2_pct:.1f}%)")
+    return "\n".join(lines)
+
+
+def _format_entry_and_sl(result) -> str:
+    price = float(getattr(result, "price", 0.0) or 0.0)
+    entry_low = float(getattr(result, "entry_zone_low", 0.0) or 0.0)
+    entry_high = float(getattr(result, "entry_zone_high", 0.0) or 0.0)
+    sl = float(getattr(result, "sl", 0.0) or 0.0)
+    lines = []
+    if 0 < entry_low <= entry_high:
+        lines.append(f"Entry Area: {entry_low:,.0f} - {entry_high:,.0f}")
+    if price > 0 and 0 < sl < price:
+        sl_pct = ((sl - price) / price) * 100
+        lines.append(f"SL: {sl:,.0f} ({sl_pct:.1f}%)")
     return "\n".join(lines)
 
 
@@ -128,8 +140,12 @@ def _build_api_payload(results: List, alert_type: str) -> List[dict]:
             "tp2": tp2,
             "tp2_pct": tp2_pct,
             "tp2_source": getattr(r, "tp2_source", None),
-            "sl": round(r.price * 0.95, 0),
-            "sl_pct": -5.0,
+            "entry_zone_low": getattr(r, "entry_zone_low", None),
+            "entry_zone_high": getattr(r, "entry_zone_high", None),
+            "sl": getattr(r, "sl", None),
+            "sl_pct": round(((r.sl - r.price) / r.price) * 100, 1)
+            if getattr(r, "sl", 0) and r.price > 0 else None,
+            "sl_source": getattr(r, "sl_source", None),
             "alert_type": alert_type,
             "alerted_at": datetime.now(WIB).isoformat(),
             "status": "open",
@@ -261,8 +277,13 @@ def format_bullish_break_message(
         lines.append(_format_stock_header(result))
         lines.append(_format_h1_bar_status(result))
         lines.append(f"Resistance {resistance:,.0f} | {_format_volume_and_value(result)}")
+        lines.append("")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
         lines.append(f"Sector: {_format_sector(result)}")
+        lines.append("")
+        entry_info = _format_entry_and_sl(result)
+        if entry_info:
+            lines.append(entry_info)
         tp_info = _format_tp_info(result, spaced_labels=True)
         if tp_info:
             lines.append(tp_info)
@@ -294,8 +315,13 @@ def format_strong_buy_message(
         lines.append(_format_stock_header(result))
         lines.append(_format_h1_bar_status(result))
         lines.append(f"Score {result.score} | {_format_volume_and_value(result)}")
+        lines.append("")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
         lines.append(f"Sector: {_format_sector(result)}")
+        lines.append("")
+        entry_info = _format_entry_and_sl(result)
+        if entry_info:
+            lines.append(entry_info)
         tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
@@ -332,8 +358,13 @@ def format_early_entry_message(
             f"Koreksi {getattr(result, 'correction_percent', 0.0):.1f}% | "
             f"{_format_volume_and_value(result)}"
         )
+        lines.append("")
         lines.append(f"Trend IHSG: {_format_market_regime(result)}")
         lines.append(f"Sector: {_format_sector(result)}")
+        lines.append("")
+        entry_info = _format_entry_and_sl(result)
+        if entry_info:
+            lines.append(entry_info)
         tp_info = _format_tp_info(result)
         if tp_info:
             lines.append(tp_info)
@@ -421,25 +452,3 @@ def send_all_alerts(signals: dict) -> int:
             signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="reversal_watch"
         )
     return messages_sent
-
-
-def send_startup_message():
-    if not TELEGRAM_TEST_CHAT_ID:
-        logger.warning("TELEGRAM_TEST_CHAT_ID belum dikonfigurasi; notifikasi startup tidak dikirim")
-        return
-    message = f"""
---------------------------
-<b>AEROLOGIC H1 STARTED</b>
---------------------------
-{get_current_time_wib()}
-Build: <code>{SCANNER_BUILD_ID}</code>
-
-Schedule: every 5 minutes during IDX sessions; forming H1 bars are eligible.
-Alerts: Bullish Breakout H1, Strong Buy H1, Early Entry H1.
---------------------------
-"""
-    send_telegram_message(
-        message.strip(),
-        chat_id=TELEGRAM_TEST_CHAT_ID,
-        use_default_thread=False,
-    )

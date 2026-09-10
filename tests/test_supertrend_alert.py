@@ -9,6 +9,7 @@ from core.indicators import calculate_supertrend
 from core.scanner import (
     _idx_tick_size,
     _daily_targets_from_h1,
+    _set_entry_and_stop_levels,
     _next_idx_price_above,
     _is_bullish_supertrend_break,
     _is_live_bullish_supertrend_break,
@@ -38,10 +39,50 @@ class SupertrendBreakTests(unittest.TestCase):
             },
             index=index,
         )
-        tp1, tp2, source = _daily_targets_from_h1(frame, 1_555.0)
+        tp1, tp2, source, daily_atr = _daily_targets_from_h1(frame, 1_555.0)
         self.assertGreater(tp1, 1_555.0)
         self.assertGreater(tp2, tp1)
         self.assertTrue(source.startswith("DAILY_"))
+        self.assertGreater(daily_atr, 0.0)
+
+    def test_entry_zone_and_stop_follow_daily_atr_and_risk_bounds(self):
+        result = SimpleNamespace(
+            price=1_000.0,
+            daily_atr=80.0,
+            supertrend_support=950.0,
+            support=900.0,
+            supertrend_value=0.0,
+            entry_zone_low=0.0,
+            entry_zone_high=0.0,
+            sl=0.0,
+            sl_source="",
+        )
+        _set_entry_and_stop_levels(result)
+        self.assertLess(result.entry_zone_low, result.entry_zone_high)
+        self.assertLess(result.sl, result.entry_zone_low)
+        risk_pct = (result.price - result.sl) / result.price * 100
+        self.assertGreaterEqual(risk_pct, 4.0)
+        self.assertLessEqual(risk_pct, 7.0)
+
+    def test_four_percent_stop_rounds_down_without_understating_risk(self):
+        result = SimpleNamespace(
+            price=484.0,
+            daily_atr=36.0,
+            supertrend_support=0.0,
+            support=0.0,
+            supertrend_value=473.0,
+            is_bullish_break=True,
+            entry_zone_low=0.0,
+            entry_zone_high=0.0,
+            sl=0.0,
+            sl_source="",
+        )
+        _set_entry_and_stop_levels(result)
+        self.assertEqual(result.entry_zone_low, 474.0)
+        self.assertEqual(result.entry_zone_high, 484.0)
+        self.assertEqual(result.sl, 464.0)
+        self.assertEqual(result.sl_source, "RISK_4PCT")
+        self.assertGreaterEqual((result.price - result.sl) / result.price, 0.04)
 
     def test_tradingview_initializes_at_first_atr_bar_on_upper_band(self):
         frame = pd.DataFrame({

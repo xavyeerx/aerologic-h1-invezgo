@@ -24,7 +24,7 @@ WIB = pytz.timezone("Asia/Jakarta")
 from config.settings import SCANNER_BUILD_ID
 from database.state_manager import StateManager
 from main import run_scan
-from notifications.telegram_bot import send_startup_message, send_telegram_message
+from notifications.telegram_bot import send_telegram_message
 
 logging.basicConfig(
     level=logging.INFO,
@@ -155,8 +155,6 @@ def main() -> None:
     logger.info("=" * 50)
 
     state_manager = StateManager()
-    send_startup_message()
-
     last_scan_slot: datetime | None = None
 
     while True:

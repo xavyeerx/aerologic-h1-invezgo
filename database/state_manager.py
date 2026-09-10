@@ -429,7 +429,7 @@ class StateManager:
         key = f"{result.ticker}_{signal_type}"
         if key in tracker and tracker[key].get('status') == 'ACTIVE':
             return
-        sl_price = result.price * 0.95
+        sl_price = getattr(result, 'sl', 0) or result.price * 0.95
         tracker[key] = {
             'signal_id': getattr(result, 'signal_id', None),
             'ticker': result.ticker,
@@ -438,6 +438,9 @@ class StateManager:
             'tp1': getattr(result, 'tp1', 0),
             'tp2': getattr(result, 'tp2', 0) or getattr(result, 'tp_swing', 0),
             'sl': sl_price,
+            'sl_source': getattr(result, 'sl_source', 'RISK_5PCT'),
+            'entry_zone_low': getattr(result, 'entry_zone_low', 0),
+            'entry_zone_high': getattr(result, 'entry_zone_high', 0),
             'alert_date': datetime.now().strftime('%Y-%m-%d'),
             'alert_time': datetime.now().strftime('%H:%M'),
             'status': 'ACTIVE',

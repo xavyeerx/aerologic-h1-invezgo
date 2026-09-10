@@ -51,6 +51,11 @@ class ScanResult:
         self.tp2 = 0.0
         self.tp2_source = "ATR"
         self.tp_swing = 0.0
+        self.entry_zone_low = 0.0
+        self.entry_zone_high = 0.0
+        self.sl = 0.0
+        self.sl_source = "RISK_5PCT"
+        self.daily_atr = 0.0
         self.volume_ratio = 0.0
         self.stoch_k = 0.0
         self.stoch_d = 0.0
@@ -139,12 +144,18 @@ def _idx_price_at_or_above(price: float) -> float:
     return math.ceil(price / tick) * tick
 
 
+def _idx_price_at_or_below(price: float) -> float:
+    """Round a risk level downward to the nearest valid IDX price fraction."""
+    tick = _idx_tick_size(price)
+    return math.floor(price / tick) * tick
+
+
 def _daily_targets_from_h1(
     df: pd.DataFrame, current_price: float
-) -> tuple[float, float, str]:
+) -> tuple[float, float, str, float]:
     """Calculate entry-anchored TP1/TP2 from H1 bars aggregated into Daily candles."""
     if df.empty or current_price <= 0:
-        return 0.0, 0.0, "DAILY_ATR"
+        return 0.0, 0.0, "DAILY_ATR", 0.0
 
     daily = df[["open", "high", "low", "close", "volume"]].copy()
     daily["trade_date"] = pd.DatetimeIndex(daily.index).date
@@ -156,7 +167,7 @@ def _daily_targets_from_h1(
         volume=("volume", "sum"),
     )
     if len(daily) < ATR_PERIOD:
-        return 0.0, 0.0, "DAILY_ATR"
+        return 0.0, 0.0, "DAILY_ATR", 0.0
 
     latest_index = daily.index[-1]
     daily.loc[latest_index, "close"] = current_price
@@ -173,8 +184,9 @@ def _daily_targets_from_h1(
     latest = daily.iloc[-1]
     raw_tp1 = float(latest.get("tp1", 0.0) or 0.0)
     raw_tp2 = float(latest.get("tp2", 0.0) or 0.0)
-    if not math.isfinite(raw_tp1) or not math.isfinite(raw_tp2):
-        return 0.0, 0.0, "DAILY_ATR"
+    daily_atr = float(latest.get("atr", 0.0) or 0.0)
+    if not all(math.isfinite(value) for value in (raw_tp1, raw_tp2, daily_atr)):
+        return 0.0, 0.0, "DAILY_ATR", 0.0
 
     tp1 = _idx_price_at_or_above(raw_tp1)
     if tp1 <= current_price:
@@ -183,7 +195,64 @@ def _daily_targets_from_h1(
     if tp2 <= tp1:
         tp2 = _next_idx_price_above(tp1)
     source = f"DAILY_{latest.get('tp2_source', 'ATR')}"
-    return tp1, tp2, source
+    return tp1, tp2, source, daily_atr
+
+
+def _set_entry_and_stop_levels(result: ScanResult) -> None:
+    """Set a Daily-ATR pullback zone and a structure-aware 4-7% stop."""
+    price = float(result.price or 0.0)
+    daily_atr = float(result.daily_atr or 0.0)
+    if price <= 0:
+        return
+
+    support_levels = [result.supertrend_support, result.support]
+    if getattr(result, "is_bullish_break", False):
+        support_levels.append(result.supertrend_value)
+    nearby_supports = [
+        float(level)
+        for level in support_levels
+        if level and price - daily_atr <= float(level) < price
+    ]
+    reference_support = max(nearby_supports, default=0.0)
+
+    raw_entry_low = price - (0.5 * daily_atr) if daily_atr > 0 else price * 0.98
+    if reference_support > 0:
+        raw_entry_low = max(raw_entry_low, reference_support)
+    entry_low = _idx_price_at_or_above(raw_entry_low)
+    entry_high = _idx_price_at_or_above(price)
+    if entry_low >= entry_high:
+        entry_low = entry_high - _idx_tick_size(entry_high)
+
+    raw_structural_sl = (
+        reference_support - _idx_tick_size(reference_support)
+        if reference_support > 0
+        else price * 0.95
+    )
+    structural_risk = (price - raw_structural_sl) / price
+    if 0.04 <= structural_risk <= 0.07:
+        raw_sl = raw_structural_sl
+        sl_source = "SUPPORT"
+    elif structural_risk < 0.04:
+        raw_sl = price * 0.96
+        sl_source = "RISK_4PCT"
+    elif structural_risk > 0.07:
+        raw_sl = price * 0.93
+        sl_source = "RISK_7PCT"
+    else:
+        raw_sl = price * 0.95
+        sl_source = "RISK_5PCT"
+
+    sl = (
+        _idx_price_at_or_below(raw_sl)
+        if sl_source in {"RISK_4PCT", "RISK_5PCT"}
+        else _idx_price_at_or_above(raw_sl)
+    )
+    if sl >= entry_low:
+        sl = entry_low - _idx_tick_size(entry_low)
+    result.entry_zone_low = max(0.0, entry_low)
+    result.entry_zone_high = entry_high
+    result.sl = max(0.0, sl)
+    result.sl_source = sl_source
 
 
 def _is_bullish_supertrend_break(df: pd.DataFrame, current_price: float) -> bool:
@@ -323,7 +392,10 @@ def analyze_stock(
                 result.bar_timestamp = (now or datetime.now(WIB)).isoformat()
                 live_quote_used = True
 
-        daily_tp1, daily_tp2, daily_tp2_source = _daily_targets_from_h1(df, result.price)
+        daily_tp1, daily_tp2, daily_tp2_source, daily_atr = _daily_targets_from_h1(
+            df, result.price
+        )
+        result.daily_atr = daily_atr
         if daily_tp1 > result.price and daily_tp2 > daily_tp1:
             result.tp1 = daily_tp1
             result.tp2 = daily_tp2
@@ -341,6 +413,7 @@ def analyze_stock(
         )
         result.is_supertrend_flip = result.is_bullish_break
         result.is_st_continuation = _has_bullish_supertrend_confirmation(df)
+        _set_entry_and_stop_levels(result)
 
         candle_close = result.price
         close20 = float(df["close"].iloc[-21]) if len(df) >= 21 else 0.0

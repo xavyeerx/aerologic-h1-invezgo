@@ -1,6 +1,5 @@
 """Preview or send representative Telegram alerts to the isolated test group."""
 
-import argparse
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -9,13 +8,11 @@ from types import SimpleNamespace
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from config.settings import TELEGRAM_TEST_CHAT_ID  # noqa: E402
 from notifications.telegram_bot import (  # noqa: E402
     format_bullish_break_message,
     format_early_entry_message,
     format_reversal_watch_message,
     format_strong_buy_message,
-    send_telegram_message,
 )
 
 
@@ -31,6 +28,10 @@ def _sample(**overrides) -> SimpleNamespace:
         "tp1": 541.0,
         "tp2": 587.0,
         "tp2_source": "ATR",
+        "entry_zone_low": 500.0,
+        "entry_zone_high": 510.0,
+        "sl": 480.0,
+        "sl_source": "SUPPORT",
         "early_entry_strength": 6,
         "correction_percent": 4.5,
         "return20_pct": -10.0,
@@ -57,6 +58,9 @@ def build_sample_alerts() -> list[tuple[str, str]]:
                     tp1=286.0,
                     tp2=300.0,
                     supertrend_value=265.0,
+                    entry_zone_low=265.0,
+                    entry_zone_high=270.0,
+                    sl=255.0,
                 )
             ]),
         ),
@@ -74,6 +78,9 @@ def build_sample_alerts() -> list[tuple[str, str]]:
                     tp1=530.0,
                     tp2=560.0,
                     supertrend_support=475.0,
+                    entry_zone_low=490.0,
+                    entry_zone_high=500.0,
+                    sl=475.0,
                 )
             ]),
         ),
@@ -99,37 +106,10 @@ def main() -> int:
         sys.stdout.reconfigure(encoding="utf-8")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(
-        description="Preview alert contoh atau kirim ke TELEGRAM_TEST_CHAT_ID."
-    )
-    parser.add_argument(
-        "--send",
-        action="store_true",
-        help="Kirim semua alert contoh ke grup test; default hanya preview.",
-    )
-    args = parser.parse_args()
     alerts = build_sample_alerts()
-
-    if not args.send:
-        for label, message in alerts:
-            print(f"\n===== {label} =====\n{message}")
-        return 0
-
-    if not TELEGRAM_TEST_CHAT_ID:
-        print("ERROR: TELEGRAM_TEST_CHAT_ID belum dikonfigurasi.", file=sys.stderr)
-        return 1
-
-    failed = []
     for label, message in alerts:
-        sent = send_telegram_message(
-            message,
-            chat_id=TELEGRAM_TEST_CHAT_ID,
-            use_default_thread=False,
-        )
-        print(f"{label}: {'TERKIRIM' if sent else 'GAGAL'}")
-        if not sent:
-            failed.append(label)
-    return 1 if failed else 0
+        print(f"\n===== {label} =====\n{message}")
+    return 0
 
 
 if __name__ == "__main__":

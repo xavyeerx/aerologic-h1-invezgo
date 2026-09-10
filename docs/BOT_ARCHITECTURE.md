@@ -32,7 +32,7 @@ Sistem bot ini terdiri dari 4 komponen utama:
 
 Proses eksekusi bot berjalan secara kronologis sebagai berikut:
 
-1. **Inisialisasi**: Proses *worker* dijalankan (sesuai definisi di `Procfile`: `python scheduler.py`). Pesan *startup* dikirim ke topik *default* via `send_startup_message()`.
+1. **Inisialisasi**: Proses *worker* dijalankan (sesuai definisi di `Procfile`: `python scheduler.py`). Startup hanya dicatat ke log dan tidak mengirim pesan Telegram.
 2. **Waiting / Sleep**: `scheduler.py` mencari jadwal terdekat (interval 5 menit di jam bursa). Jika belum waktunya, proses melakukan `sleep`.
 3. **Triggering Scan**: Setelah waktu target tercapai, `scheduler.py` mengeksekusi `run_scan(force=True)` dari `main.py`.
 4. **Data Pipeline**:
@@ -64,7 +64,6 @@ Bot ini mengandalkan beberapa variabel terpusat dari modul `config/settings.py` 
 - `TELEGRAM_BOT_TOKEN`: *Access token* unik dari BotFather.
 - `TELEGRAM_CHAT_ID`: Supergroup tujuan alert scanner.
 - `TELEGRAM_SCANNER_TOPIC_ID`: ID topik tunggal untuk seluruh alert scanner.
-- `TELEGRAM_TEST_CHAT_ID`: Grup terpisah untuk pengujian serta notifikasi startup/restart tanpa topic.
 
 ## Kesimpulan
 

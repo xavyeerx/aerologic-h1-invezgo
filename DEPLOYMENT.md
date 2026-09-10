@@ -106,7 +106,6 @@ Isi minimal:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=-1004302626864
-TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 

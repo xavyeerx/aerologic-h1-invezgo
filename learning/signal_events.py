@@ -96,7 +96,8 @@ def signal_snapshot(scan_result, signal_type: str, regime_info: dict) -> dict[st
         "stoch_d", "supertrend_value", "is_supertrend_flip", "is_bullish_break",
         "is_st_continuation",
         "is_counter_trend", "is_bullish_engulfing", "is_price_breakout", "atr_pct",
-        "tp1", "tp2", "tp2_source", "support", "resistance",
+        "tp1", "tp2", "tp2_source", "entry_zone_low", "entry_zone_high",
+        "sl", "sl_source", "daily_atr", "support", "resistance",
     )
     settings = __import__("config.settings", fromlist=["SCANNER_BUILD_ID"])
     setup_families = {

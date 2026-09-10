@@ -24,6 +24,11 @@ ke harga realtime saat alert. TP1 selalu berada di atas harga alert dan TP2 sela
 berada di atas TP1. TP2 menggunakan resistance Daily yang valid atau fallback ATR
 Daily.
 
+Alert juga menampilkan `Entry Area` dari harga alert hingga area pullback sekitar
+0,5 Daily ATR. SL menggunakan support teknikal terdekat apabila risikonya berada
+dalam rentang 4–7%; support yang terlalu dekat atau jauh dinormalisasi ke batas
+risiko 4% atau 7%, dengan fallback standar 5%.
+
 ## Jenis Alert
 
 ### Strong Buy H1
@@ -128,7 +133,6 @@ Isi minimal pada `.env`:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=replace_me
-TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 
@@ -155,12 +159,6 @@ Preview seluruh contoh alert tanpa mengirim ke Telegram:
 
 ```powershell
 python scripts/test_alerts.py
-```
-
-Kirim seluruh contoh alert hanya ke `TELEGRAM_TEST_CHAT_ID`:
-
-```powershell
-python scripts/test_alerts.py --send
 ```
 
 Menjalankan scheduler produksi lokal:

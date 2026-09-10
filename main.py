@@ -18,7 +18,7 @@ from core.scanner import filter_signals, has_any_signal, scan_all_stocks
 from core.screener import get_candidates
 from database.state_manager import StateManager
 from learning.signal_events import SignalEventStore, new_signal_id, signal_snapshot
-from notifications.telegram_bot import send_all_alerts, send_startup_message
+from notifications.telegram_bot import send_all_alerts
 
 try:
     from learning.market_regime import get_market_regime
@@ -245,12 +245,6 @@ def main():
     if len(state_manager.get_all_states()) == 0:
         logger.info("First run detected. Initial scan will not generate alerts.")
     run_scan(state_manager, force=True)
-
-
-def run_with_notification():
-    logger.info("aerologic H1 scanner starting with notification...")
-    send_startup_message()
-    run_scan(StateManager(), force=True)
 
 
 if __name__ == "__main__":
