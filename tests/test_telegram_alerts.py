@@ -1,7 +1,10 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import patch
 
+import notifications.telegram_bot as telegram_bot
 from notifications.telegram_bot import (
+    _send_to_api,
     _format_transaction_value,
     format_bullish_break_message,
     format_early_entry_message,
@@ -25,6 +28,25 @@ def result(**overrides):
 
 
 class TelegramAlertFormattingTests(unittest.TestCase):
+    def test_backend_sync_is_disabled_by_default(self):
+        with patch.object(telegram_bot, "SIGNAL_API_ENABLED", False), patch.object(
+            telegram_bot.requests, "post"
+        ) as post:
+            _send_to_api([result()], "strong_buy")
+        post.assert_not_called()
+
+    def test_backend_sync_runs_once_for_a_chunked_batch(self):
+        with patch.object(
+            telegram_bot, "_chunked_alert_messages", return_value=["part 1", "part 2"]
+        ), patch.object(
+            telegram_bot, "send_telegram_message", return_value=True
+        ), patch.object(telegram_bot, "_send_to_api") as send_api:
+            sent = telegram_bot.send_chunked_alert(
+                [result()], format_strong_buy_message, alert_type="strong_buy"
+            )
+        self.assertEqual(sent, 2)
+        send_api.assert_called_once()
+
     def test_targets_at_or_below_alert_price_are_hidden(self):
         message = format_strong_buy_message([result(price=550.0, tp1=540.0, tp2=550.0)])
         self.assertNotIn("TP1:", message)

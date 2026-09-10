@@ -138,6 +138,15 @@ Jika grup Telegram menggunakan Topics:
 TELEGRAM_SCANNER_TOPIC_ID=replace_me
 ```
 
+Telegram adalah transport alert utama. Sinkronisasi backend default-nya nonaktif
+untuk mencegah endpoint sekunder mengirim ulang alert. Aktifkan hanya jika endpoint
+dipastikan tidak meneruskan pesan ke Telegram:
+
+```dotenv
+SIGNAL_API_ENABLED=true
+SIGNAL_API_URL=https://example.com/api/signals
+```
+
 Secret tidak boleh ditulis langsung ke source code atau di-commit. `.env` sudah dikecualikan oleh `.gitignore`.
 
 ## Menjalankan Bot

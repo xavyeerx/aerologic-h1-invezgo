@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260910-daily-target-global-dedup"
+SCANNER_BUILD_ID = "20260910-telegram-single-sender"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -24,6 +24,15 @@ def _env_int_or_none(name: str):
 
 
 TELEGRAM_SCANNER_TOPIC_ID = _env_int_or_none("TELEGRAM_SCANNER_TOPIC_ID")
+
+# Telegram is the authoritative alert transport; backend sync is explicitly opt-in.
+SIGNAL_API_ENABLED = os.getenv("SIGNAL_API_ENABLED", "false").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+SIGNAL_API_URL = os.getenv(
+    "SIGNAL_API_URL",
+    "https://aerologicbot-web-app.vercel.app/api/webhook-bot-telegram",
+).strip()
 
 # Price and indicator settings
 BREAKOUT_LOOKBACK = 20

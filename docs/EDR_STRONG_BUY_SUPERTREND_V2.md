@@ -88,3 +88,7 @@ the first successfully claimed category owns the ticker for that date.
 Identical alerts from different project directories remain an operational concern:
 file locking only coordinates processes that share the same runtime database path.
 Production must run a single service targeting a given Telegram chat and topic.
+The optional signal backend is disabled by default because its former webhook URL
+may have notification side effects. Telegram is the authoritative sender. When
+backend sync is explicitly enabled, one payload is sent per alert batch rather than
+once per Telegram chunk.

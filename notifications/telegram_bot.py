@@ -8,6 +8,8 @@ import requests
 
 from config.settings import (
     SCANNER_BUILD_ID,
+    SIGNAL_API_ENABLED,
+    SIGNAL_API_URL,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
     TELEGRAM_TEST_CHAT_ID,
@@ -137,10 +139,12 @@ def _build_api_payload(results: List, alert_type: str) -> List[dict]:
 
 def _send_to_api(results: List, alert_type: str) -> None:
     """Kirim data signal terstruktur ke Next.js API."""
+    if not SIGNAL_API_ENABLED or not SIGNAL_API_URL or not alert_type:
+        return
     try:
         api_payload = _build_api_payload(results, alert_type)
         response = requests.post(
-            "https://aerologicbot-web-app.vercel.app/api/webhook-bot-telegram",
+            SIGNAL_API_URL,
             json=api_payload,
             timeout=10,
         )
@@ -392,7 +396,8 @@ def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None,
     for msg in _chunked_alert_messages(results, format_fn):
         if send_telegram_message(msg, thread_id=thread_id):
             sent += 1
-            _send_to_api(results, alert_type)
+    if sent > 0:
+        _send_to_api(results, alert_type)
     return sent
 
 
