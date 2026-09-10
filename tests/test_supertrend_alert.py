@@ -2,11 +2,13 @@ import unittest
 from types import SimpleNamespace
 
 import pandas as pd
+import numpy as np
 
 from core.indicators import calculate_supertrend
 
 from core.scanner import (
     _idx_tick_size,
+    _daily_targets_from_h1,
     _next_idx_price_above,
     _is_bullish_supertrend_break,
     _is_live_bullish_supertrend_break,
@@ -17,6 +19,30 @@ from core.scanner import (
 
 
 class SupertrendBreakTests(unittest.TestCase):
+    def test_daily_targets_are_above_realtime_entry(self):
+        index = pd.DatetimeIndex(
+            [
+                day + pd.Timedelta(hours=hour)
+                for day in pd.bdate_range("2026-08-10", periods=20)
+                for hour in (9, 11, 14)
+            ]
+        )
+        base = np.linspace(1_350.0, 1_500.0, len(index))
+        frame = pd.DataFrame(
+            {
+                "open": base - 10.0,
+                "high": base + 20.0,
+                "low": base - 20.0,
+                "close": base,
+                "volume": np.full(len(index), 1_000_000.0),
+            },
+            index=index,
+        )
+        tp1, tp2, source = _daily_targets_from_h1(frame, 1_555.0)
+        self.assertGreater(tp1, 1_555.0)
+        self.assertGreater(tp2, tp1)
+        self.assertTrue(source.startswith("DAILY_"))
+
     def test_tradingview_initializes_at_first_atr_bar_on_upper_band(self):
         frame = pd.DataFrame({
             "high": [11, 12, 13, 14],

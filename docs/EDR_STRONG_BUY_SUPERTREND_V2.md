@@ -72,3 +72,19 @@ Track results by build ID and record at least signal count, alert-time Stoch RSI
 session change, Supertrend confirmation state, repaint-at-close rate, and MFE/MAE
 after 1H, 1D, and 3D. Threshold effectiveness must be evaluated on the new H1
 cohort and must not be inferred from legacy Daily or H4 tracker records.
+
+## 2026-09-10 target and deduplication amendment
+
+Alert targets are no longer taken directly from the latest H1 indicator row. H1
+bars are aggregated into Daily candles and the current Daily candle is anchored to
+the realtime alert price. TP1 uses Daily ATR; TP2 uses a valid Daily resistance or
+Daily ATR fallback. IDX tick rounding and output guards enforce `TP2 > TP1 > alert
+price`.
+
+Daily deduplication is now unconditional across Bullish Breakout, Strong Buy, Early
+Entry, and Reversal Watch. The previous Bullish Breakout exception was removed, so
+the first successfully claimed category owns the ticker for that date.
+
+Identical alerts from different project directories remain an operational concern:
+file locking only coordinates processes that share the same runtime database path.
+Production must run a single service targeting a given Telegram chat and topic.

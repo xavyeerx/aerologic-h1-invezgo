@@ -25,6 +25,11 @@ def result(**overrides):
 
 
 class TelegramAlertFormattingTests(unittest.TestCase):
+    def test_targets_at_or_below_alert_price_are_hidden(self):
+        message = format_strong_buy_message([result(price=550.0, tp1=540.0, tp2=550.0)])
+        self.assertNotIn("TP1:", message)
+        self.assertNotIn("TP2:", message)
+
     def test_transaction_value_uses_compact_indonesian_decimal(self):
         self.assertEqual(_format_transaction_value(1_200_000_000), "1,2B")
         self.assertEqual(_format_transaction_value(850_000_000), "850,0M")

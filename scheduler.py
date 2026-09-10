@@ -150,6 +150,7 @@ def main() -> None:
     logger.info("=" * 50)
     logger.info("aerologic H1 scheduler")
     logger.info("Build: %s", SCANNER_BUILD_ID)
+    logger.info("Instance: pid=%d root=%s", os.getpid(), _PROJECT_ROOT)
     logger.info("Scan tiap 5 menit; indikator memakai latest H1 termasuk forming candle")
     logger.info("=" * 50)
 

@@ -84,10 +84,10 @@ def _format_tp_info(result, *, spaced_labels: bool = False) -> str:
     lines = []
     tp1_label = "TP 1" if spaced_labels else "TP1"
     tp2_label = "TP 2" if spaced_labels else "TP2"
-    if getattr(result, "tp1", 0) > 0:
+    if getattr(result, "tp1", 0) > result.price:
         tp1_pct = ((result.tp1 - result.price) / result.price) * 100
         lines.append(f"{tp1_label}: {result.tp1:,.0f} (+{tp1_pct:.1f}%)")
-    if getattr(result, "tp2", 0) > 0:
+    if getattr(result, "tp2", 0) > result.price:
         tp2_pct = ((result.tp2 - result.price) / result.price) * 100
         source = getattr(result, "tp2_source", "ATR")
         lines.append(f"{tp2_label}: {result.tp2:,.0f} (+{tp2_pct:.1f}%) {source}")
@@ -107,8 +107,12 @@ def _build_api_payload(results: List, alert_type: str) -> List[dict]:
     for r in results:
         tp1 = getattr(r, "tp1", None)
         tp2 = getattr(r, "tp2", None)
-        tp1_pct = round(((tp1 - r.price) / r.price) * 100, 1) if tp1 and tp1 > 0 else None
-        tp2_pct = round(((tp2 - r.price) / r.price) * 100, 1) if tp2 and tp2 > 0 else None
+        tp1_valid = bool(tp1 and tp1 > r.price)
+        tp2_valid = bool(tp2 and tp2 > r.price)
+        tp1 = tp1 if tp1_valid else None
+        tp2 = tp2 if tp2_valid else None
+        tp1_pct = round(((tp1 - r.price) / r.price) * 100, 1) if tp1_valid else None
+        tp2_pct = round(((tp2 - r.price) / r.price) * 100, 1) if tp2_valid else None
         payload.append({
             "ticker": r.ticker.replace(".JK", ""),
             "alert_price": r.price,

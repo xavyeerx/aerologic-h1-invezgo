@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260909-strong-buy-st-v2"
+SCANNER_BUILD_ID = "20260910-daily-target-global-dedup"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

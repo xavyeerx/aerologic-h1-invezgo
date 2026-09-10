@@ -19,6 +19,11 @@ Alur produksi saat ini:
 
 Harga, indikator, dan trigger alert berasal dari seri H1 Invezgo yang sama, termasuk forming candle. Sinyal intrabar dapat berubah sebelum candle close.
 
+TP1 dan TP2 dihitung dari candle H1 yang diagregasi menjadi Daily, lalu di-anchor
+ke harga realtime saat alert. TP1 selalu berada di atas harga alert dan TP2 selalu
+berada di atas TP1. TP2 menggunakan resistance Daily yang valid atau fallback ATR
+Daily.
+
 ## Jenis Alert
 
 ### Strong Buy H1
@@ -56,7 +61,7 @@ Alert ini merupakan watchlist berisiko tinggi dan membutuhkan follow-through.
 
 Pembatas berlaku per ticker dan lintas seluruh jenis alert:
 
-- satu ticker hanya dapat dikirim sekali pada tanggal yang sama;
+- satu ticker hanya dapat dikirim sekali pada tanggal yang sama, lintas Bullish Breakout, Strong Buy, Early Entry, dan Reversal Watch;
 - maksimal dua call dalam rolling window 14 hari kalender;
 - maksimal dua sesi bursa berturut-turut—call pada sesi ketiga diblokir;
 - `PACK`, `pack`, dan `PACK.JK` dianggap ticker yang sama;

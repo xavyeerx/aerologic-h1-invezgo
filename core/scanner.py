@@ -13,7 +13,12 @@ from config.settings import *
 from .arb_filter import apply_post_alert_arb_gate
 from .bar_contract import require_price_signal_eligible
 from .data_fetcher import compute_session_change_percent
-from .indicators import calculate_all_indicators
+from .indicators import (
+    calculate_all_indicators,
+    calculate_atr,
+    calculate_support_resistance,
+    calculate_targets,
+)
 from .scoring import calculate_total_score
 from .signal_engine import (
     SignalFeatures,
@@ -126,6 +131,59 @@ def _next_idx_price_above(price: float) -> float:
     """Return the first valid IDX price fraction strictly above an indicator line."""
     tick = _idx_tick_size(price)
     return (math.floor(price / tick) + 1) * tick
+
+
+def _idx_price_at_or_above(price: float) -> float:
+    """Round a target upward to the nearest valid IDX price fraction."""
+    tick = _idx_tick_size(price)
+    return math.ceil(price / tick) * tick
+
+
+def _daily_targets_from_h1(
+    df: pd.DataFrame, current_price: float
+) -> tuple[float, float, str]:
+    """Calculate entry-anchored TP1/TP2 from H1 bars aggregated into Daily candles."""
+    if df.empty or current_price <= 0:
+        return 0.0, 0.0, "DAILY_ATR"
+
+    daily = df[["open", "high", "low", "close", "volume"]].copy()
+    daily["trade_date"] = pd.DatetimeIndex(daily.index).date
+    daily = daily.groupby("trade_date", sort=True).agg(
+        open=("open", "first"),
+        high=("high", "max"),
+        low=("low", "min"),
+        close=("close", "last"),
+        volume=("volume", "sum"),
+    )
+    if len(daily) < ATR_PERIOD:
+        return 0.0, 0.0, "DAILY_ATR"
+
+    latest_index = daily.index[-1]
+    daily.loc[latest_index, "close"] = current_price
+    daily.loc[latest_index, "high"] = max(
+        float(daily.loc[latest_index, "high"]), current_price
+    )
+    daily.loc[latest_index, "low"] = min(
+        float(daily.loc[latest_index, "low"]), current_price
+    )
+    calculate_atr(daily)
+    calculate_support_resistance(daily)
+    calculate_targets(daily)
+
+    latest = daily.iloc[-1]
+    raw_tp1 = float(latest.get("tp1", 0.0) or 0.0)
+    raw_tp2 = float(latest.get("tp2", 0.0) or 0.0)
+    if not math.isfinite(raw_tp1) or not math.isfinite(raw_tp2):
+        return 0.0, 0.0, "DAILY_ATR"
+
+    tp1 = _idx_price_at_or_above(raw_tp1)
+    if tp1 <= current_price:
+        tp1 = _next_idx_price_above(current_price)
+    tp2 = _idx_price_at_or_above(raw_tp2)
+    if tp2 <= tp1:
+        tp2 = _next_idx_price_above(tp1)
+    source = f"DAILY_{latest.get('tp2_source', 'ATR')}"
+    return tp1, tp2, source
 
 
 def _is_bullish_supertrend_break(df: pd.DataFrame, current_price: float) -> bool:
@@ -264,6 +322,17 @@ def analyze_stock(
                 result.bar_closed = False
                 result.bar_timestamp = (now or datetime.now(WIB)).isoformat()
                 live_quote_used = True
+
+        daily_tp1, daily_tp2, daily_tp2_source = _daily_targets_from_h1(df, result.price)
+        if daily_tp1 > result.price and daily_tp2 > daily_tp1:
+            result.tp1 = daily_tp1
+            result.tp2 = daily_tp2
+            result.tp2_source = daily_tp2_source
+            result.tp_swing = daily_tp2
+        else:
+            result.tp1 = 0.0
+            result.tp2 = 0.0
+            result.tp_swing = 0.0
 
         result.is_bullish_break = (
             _is_live_bullish_supertrend_break(df, result.price)

@@ -267,11 +267,6 @@ class StateManager:
             self._reset_daily_alerts()
         canonical = _canonical_ticker(ticker)
         history_dates = self.daily_alerts.get("history", {}).get(canonical, [])
-        if signal_type == "bullish_break":
-            return canonical in {
-                _canonical_ticker(item)
-                for item in self.daily_alerts.get("bullish_break", [])
-            }
         return self._was_ticker_alerted_today(ticker) or today in history_dates
 
     def _claim_alert_unlocked(self, signal_type: str, ticker: str) -> bool:
