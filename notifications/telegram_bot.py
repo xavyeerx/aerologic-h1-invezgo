@@ -1,10 +1,13 @@
 import logging
+import re
 from html import escape
 from datetime import datetime
 from typing import List
 
 import pytz
 import requests
+
+from core.news_context import format_context_date
 
 from config.settings import (
     SIGNAL_API_ENABLED,
@@ -42,6 +45,62 @@ def _format_volume_and_value(result) -> str:
 
 def _append_alert_footer(lines: List[str]) -> None:
     lines.extend(["", ALERT_DISCLAIMER, ALERT_FOOTER])
+
+
+def _sanitize_context_text(value: object) -> str:
+    without_source_brand = re.sub(
+        r"\binvezgo(?:\s+(?:news|report))?\b[\s,:-]*",
+        "",
+        str(value or ""),
+        flags=re.IGNORECASE,
+    )
+    return escape(" ".join(without_source_brand.split()))
+
+
+def _format_context_item(item) -> str:
+    return f"• {format_context_date(item.published_at)}: {_sanitize_context_text(item.title)}"
+
+
+def _append_news_context(lines: List[str], result) -> None:
+    context = getattr(result, "news_context", None)
+    if context is None:
+        return
+
+    ticker = escape(str(result.ticker).replace(".JK", ""))
+    lines.extend(["", f"<b>📰 KONTEKS &amp; KATALIS {ticker}</b>", ""])
+    if context.direct is None:
+        lines.append("Katalis langsung: Tidak ditemukan")
+    else:
+        sentiment = "Positif" if context.direct.sentiment == "positive" else "Negatif/Risiko"
+        lines.append(
+            f"Katalis langsung: {sentiment} — "
+            f"{format_context_date(context.direct.published_at)}: "
+            f"{_sanitize_context_text(context.direct.title)}"
+        )
+
+    if context.positives:
+        lines.extend(["", "Positif:"])
+        lines.extend(_format_context_item(item) for item in context.positives)
+    if context.risks:
+        lines.extend(["", "Negatif/Risiko:"])
+        lines.extend(_format_context_item(item) for item in context.risks)
+
+    lines.extend(["", "Kesimpulan:"])
+    if context.direct is None:
+        lines.extend([
+            "Momentum teknikal belum didukung katalis baru yang terverifikasi.",
+            "Waspadai volatilitas dan risiko aksi harga spekulatif.",
+        ])
+    elif context.direct.sentiment == "positive":
+        lines.extend([
+            "Momentum teknikal memiliki katalis positif terbaru yang teridentifikasi.",
+            "Konfirmasi keberlanjutan respons harga dan tetap disiplin pada batas risiko.",
+        ])
+    else:
+        lines.extend([
+            "Momentum teknikal disertai risiko material terbaru yang perlu diperhatikan.",
+            "Waspadai volatilitas dan tetap disiplin pada batas risiko.",
+        ])
 
 def send_telegram_message(
     message: str,
@@ -197,6 +256,7 @@ def format_reversal_watch_message(results: List) -> str:
             f"   Return 20 bar {getattr(result, 'return20_pct', 0.0):+.1f}% | "
             f"RSI {getattr(result, 'rsi', 50.0):.1f} | {_format_volume_and_value(result)}"
         )
+        _append_news_context(lines, result)
         lines.append("")
     _append_alert_footer(lines)
     return "\n".join(lines)
@@ -237,6 +297,7 @@ def format_bullish_break_message(results: List) -> str:
                 "",
                 "Pantau area RBS (resistance become support), pastikan closing di atas harga tersebut agar bukan false breakout.",
             ])
+        _append_news_context(lines, result)
         lines.append("")
     _append_alert_footer(lines)
     return "\n".join(lines)
@@ -271,6 +332,7 @@ def format_strong_buy_message(results: List) -> str:
                 "",
                 f"Pastikan area Support ({support:,.0f}) dijaga agar momentum masih bullish.",
             ])
+        _append_news_context(lines, result)
         lines.append("")
     _append_alert_footer(lines)
     return "\n".join(lines)
@@ -309,6 +371,7 @@ def format_early_entry_message(results: List) -> str:
                 "",
                 f"Pastikan area Support ({support:,.0f}) dijaga agar momentum masih bullish.",
             ])
+        _append_news_context(lines, result)
         lines.append("")
     _append_alert_footer(lines)
     return "\n".join(lines)

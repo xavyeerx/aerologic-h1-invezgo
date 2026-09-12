@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260910-entry-risk-levels"
+SCANNER_BUILD_ID = "20260913-deterministic-news-context"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -116,6 +116,21 @@ DIV_VOLUME_DECLINE_RATIO = 1.5
 
 # Logic settings
 MIN_DAILY_TURNOVER = 5_000_000_000
+
+# Deterministic news context enrichment. No LLM is used.
+NEWS_CONTEXT_ENABLED = os.getenv("NEWS_CONTEXT_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+NEWS_CONTEXT_MAX_AGE_DAYS = max(
+    1, int(os.getenv("NEWS_CONTEXT_MAX_AGE_DAYS", "30"))
+)
+NEWS_CONTEXT_DIRECT_MAX_AGE_DAYS = max(
+    1, int(os.getenv("NEWS_CONTEXT_DIRECT_MAX_AGE_DAYS", "7"))
+)
+NEWS_CONTEXT_MAX_ITEMS_PER_GROUP = max(
+    1, int(os.getenv("NEWS_CONTEXT_MAX_ITEMS_PER_GROUP", "2"))
+)
+NEWS_CONTEXT_WORKERS = max(1, int(os.getenv("NEWS_CONTEXT_WORKERS", "4")))
 
 # File paths
 STATE_FILE = "database/stock_states.json"

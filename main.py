@@ -14,6 +14,7 @@ from config.settings import *
 from core.data_fetcher import fetch_multiple_stocks
 from core.data_provider import InvezgoError, fetch_stock_sector
 from core.market_session import is_scan_session
+from core.news_context import enrich_signals_with_news
 from core.scanner import filter_signals, has_any_signal, scan_all_stocks
 from core.screener import get_candidates
 from database.state_manager import StateManager
@@ -170,6 +171,9 @@ def run_scan(state_manager: StateManager, force: bool = False) -> dict:
         for signal_list in new_signals.values():
             for result in signal_list:
                 result.sector = fetch_stock_sector(result.ticker)
+
+        enriched_tickers = enrich_signals_with_news(new_signals)
+        logger.info("News context enriched for %d ticker(s)", enriched_tickers)
 
         for signal_type, signal_list in new_signals.items():
             for result in signal_list:

@@ -1,8 +1,11 @@
 import unittest
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import notifications.telegram_bot as telegram_bot
+import pytz
+from core.news_context import NewsContext, NewsContextItem
 from notifications.telegram_bot import (
     _send_to_api,
     _format_transaction_value,
@@ -127,6 +130,30 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("Entry Area: 500 - 510", message)
         self.assertIn("SL: 480 (-5.9%)", message)
         self.assertNotIn("SUPPORT", message)
+
+    def test_strong_buy_appends_sanitized_recent_news_context(self):
+        published_at = pytz.timezone("Asia/Jakarta").localize(
+            datetime(2026, 8, 24, 14, 26)
+        )
+        context = NewsContext(
+            direct=None,
+            positives=(),
+            risks=(
+                NewsContextItem(
+                    "Invezgo News - BEI Buka Kembali Perdagangan Saham PACK",
+                    published_at,
+                    "risk",
+                ),
+            ),
+        )
+
+        message = format_strong_buy_message([result(news_context=context)])
+
+        self.assertIn("📰 KONTEKS &amp; KATALIS PACK", message)
+        self.assertIn("Katalis langsung: Tidak ditemukan", message)
+        self.assertIn("• 24 Agu: BEI Buka Kembali Perdagangan Saham PACK", message)
+        self.assertIn("Momentum teknikal belum didukung katalis baru", message)
+        self.assertNotIn("Invezgo", message)
 
     def test_early_entry_maps_bull_regime_and_uses_support(self):
         message = format_early_entry_message([result(market_regime="BULL")])

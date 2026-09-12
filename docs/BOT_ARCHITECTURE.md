@@ -44,8 +44,9 @@ Proses eksekusi bot berjalan secara kronologis sebagai berikut:
    - Fungsi `filter_signals()` memisahkan hasil menjadi beberapa kategori: `strong_buy`, `early_entry`, dan `reversal_watch`.
    - Menggunakan `try_claim_h1_alert` untuk klaim sinyal H1 intrabar; daily risk cap tetap dipertahankan.
 6. **Dispatch & Notification**:
+   - Worker `core/news_context.py` mengambil `news` dan `disclosure` terbaru hanya untuk ticker yang lolos alert, lalu menerapkan freshness dan klasifikasi berbasis aturan tanpa AI.
    - Jika terdapat sinyal baru, fungsi `send_all_alerts(new_signals)` di modul Telegram akan dieksekusi.
-   - Hasil dikelompokkan ke dalam format *message* yang sesuai dengan kriteria (judul tebal, emoji penanda) lalu di-POST ke Telegram API menggunakan `TELEGRAM_SCANNER_TOPIC_ID`.
+   - Setiap ticker diformat sebagai satu pesan mandiri, diperkaya konteks yang tersedia, lalu di-POST ke Telegram API menggunakan `TELEGRAM_SCANNER_TOPIC_ID`.
    - *State* terbaru disimpan kembali oleh *State Manager* ke dalam penyimpanan lokal agar tersinkronisasi.
 
 ## 4. Detail Modul Telegram Bot
@@ -54,8 +55,9 @@ Modul `notifications/telegram_bot.py` memiliki mekanisme internal yang adaptif u
 
 - **Request Method**: Menggunakan modul Python `requests` dengan metode standard HTTP POST via URI API Telegram: `https://api.telegram.org/bot<TOKEN>/sendMessage`.
 - **Formatting Template**: Masing-masing jenis sinyal (Strong Buy, Early Entry, dll.) diproses menggunakan fungsi *formatter* (seperti `format_strong_buy_message`). Template dirancang untuk mendukung opsi `HTML` `parse_mode` untuk efek teks tebal (`<b>`) dan miring (`<i>`).
-- **Chunking (Pemecahan Pesan)**: Terdapat batasan maksimum karakter per pesan pada Telegram API (`TELEGRAM_MAX_CHARS = 3800`). Bila *list result* sangat banyak (hingga ribuan kata), fungsi `_chunked_alert_messages` bertugas memecah array hasil menjadi beberapa buah pesan berseri (*Part* 1, *Part* 2, dst.) yang dikirim secara sekuensial.
+- **Pesan per Ticker**: Fungsi `_chunked_alert_messages` mempertahankan nama lama untuk kompatibilitas internal, tetapi menghasilkan tepat satu pesan untuk setiap ticker unik.
 - **Deduplication**: Fungsi helper `_dedupe_results_by_ticker` diselipkan untuk memastikan tidak ada emiten/ticker yang kebetulan masuk ke dalam array yang sama dan merusak validitas *alert*.
+- **News Context**: Worker hanya mempertimbangkan item dalam 30 hari sebelum alert, membatasi katalis langsung hingga tujuh hari, dan tidak menampilkan blok konteks jika seluruh sumber gagal diambil.
 - **Thread Targeting**: Untuk grup yang diset menjadi *Supergroup* yang diaktifkan mode topiknya, setiap API *call* akan menyertakan parameter payload opsional `message_thread_id`. 
 
 ## 5. Konfigurasi 

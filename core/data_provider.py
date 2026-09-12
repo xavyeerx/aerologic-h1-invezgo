@@ -243,6 +243,42 @@ def fetch_stock_sector(code: str) -> str:
     return sector or "UNKNOWN"
 
 
+def _extract_post_rows(payload: Any) -> list[dict]:
+    if isinstance(payload, dict):
+        payload = payload.get("data", [])
+    if not isinstance(payload, list):
+        return []
+    return [row for row in payload if isinstance(row, dict)]
+
+
+def fetch_stock_news(code: str) -> list[dict]:
+    """Return the latest stock-specific news posts."""
+    normalized_code = str(code or "").replace(".JK", "").strip().upper()
+    if not normalized_code:
+        return []
+    payload = _request(
+        "GET",
+        f"posts/space/category/{normalized_code}/NEWS",
+        category="stock_news",
+        params={"page": 1, "limit": 10},
+    )
+    return _extract_post_rows(payload)
+
+
+def fetch_stock_disclosures(code: str) -> list[dict]:
+    """Return the latest exchange disclosures for one stock."""
+    normalized_code = str(code or "").replace(".JK", "").strip().upper()
+    if not normalized_code:
+        return []
+    payload = _request(
+        "GET",
+        f"posts/space/category/{normalized_code}/REPORT",
+        category="stock_disclosure",
+        params={"page": 1, "limit": 10},
+    )
+    return _extract_post_rows(payload)
+
+
 def _rows_to_ohlc_df(rows: list[dict]) -> Optional[pd.DataFrame]:
     """
     Konversi array {date, open, high, low, close, volume} Invezgo → DataFrame

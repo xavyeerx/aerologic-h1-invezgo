@@ -97,6 +97,13 @@ Powered by Aerologic
 
 `Val` adalah estimasi nilai transaksi hari berjalan dari `close × volume`, ditampilkan ringkas dalam `M`, `B`, atau `T`.
 
+Setiap ticker yang lolos alert juga diperkaya dengan konteks `news` dan `disclosure`
+secara deterministik tanpa AI. Hanya item yang terbit paling lama 30 hari sebelum
+waktu alert yang dipertimbangkan; kandidat katalis langsung dibatasi tujuh hari.
+Judul lama, masa depan, duplikat, rutin, atau tidak material dibuang. Jika kedua
+endpoint gagal, alert teknikal tetap dikirim tanpa blok konteks agar kegagalan data
+tidak disalahartikan sebagai tidak adanya katalis.
+
 ## Jadwal
 
 Scheduler menggunakan zona waktu `Asia/Jakarta`:
@@ -187,6 +194,11 @@ Nilai default berada di `config/settings.py`; parameter operasional tertentu dap
 | `INVEZGO_MONTHLY_QUOTA` | `65000` | Kuota bulanan yang dipantau |
 | `INVEZGO_QUOTA_WARN_PCT` | `90` | Ambang peringatan kuota |
 | `INVEZGO_QUOTA_BREAK_PCT` | `95` | Ambang penghentian fetch chart |
+| `NEWS_CONTEXT_ENABLED` | `true` | Aktifkan enrichment news/disclosure tanpa AI |
+| `NEWS_CONTEXT_MAX_AGE_DAYS` | `30` | Umur maksimum konteks dari waktu alert |
+| `NEWS_CONTEXT_DIRECT_MAX_AGE_DAYS` | `7` | Umur maksimum katalis langsung |
+| `NEWS_CONTEXT_MAX_ITEMS_PER_GROUP` | `2` | Maksimum berita positif dan risiko per ticker |
+| `NEWS_CONTEXT_WORKERS` | `4` | Jumlah thread enrichment ticker |
 | `SCREEN_VOLUME_MIN_FACTOR` | `0.005` | Floor faktor volume screener |
 | `STRONG_BUY_MAX_CHANGE_PCT` | `12.0` | Batas maksimum perubahan sesi Strong Buy |
 | `STRONG_BUY_STOCH_RSI_MAX` | `60.0` | Batas eksklusif Stoch RSI K pada regime Sideways/Bear |
