@@ -37,7 +37,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
             _send_to_api([result()], "strong_buy")
         post.assert_not_called()
 
-    def test_backend_sync_runs_once_for_a_chunked_batch(self):
+    def test_backend_sync_runs_once_for_an_alert_batch(self):
         with patch.object(
             telegram_bot, "_chunked_alert_messages", return_value=["part 1", "part 2"]
         ), patch.object(
@@ -76,6 +76,30 @@ class TelegramAlertFormattingTests(unittest.TestCase):
                 self.assertLess(message.index("DYOR."), message.index("Powered by Aerologic"))
                 self.assertTrue(message.endswith("<i>Powered by Aerologic</i>"))
 
+    def test_all_alert_types_omit_h1_candle_status_and_total(self):
+        for formatter in (
+            format_strong_buy_message,
+            format_bullish_break_message,
+            format_early_entry_message,
+            format_reversal_watch_message,
+        ):
+            with self.subTest(formatter=formatter.__name__):
+                message = formatter([result(bar_closed=False)])
+                self.assertNotIn("H1", message)
+                self.assertNotIn("Candle", message)
+                self.assertNotIn("Total:", message)
+
+    def test_each_unique_ticker_is_sent_as_a_separate_message(self):
+        results = [result(ticker="PACK.JK"), result(ticker="RAJA.JK"), result(ticker="PACK.JK")]
+
+        messages = telegram_bot._chunked_alert_messages(results, format_strong_buy_message)
+
+        self.assertEqual(len(messages), 2)
+        self.assertIn("<b>PACK |", messages[0])
+        self.assertNotIn("RAJA", messages[0])
+        self.assertIn("<b>RAJA |", messages[1])
+        self.assertNotIn("PACK", messages[1])
+
     def test_bullish_breakout_format(self):
         message = format_bullish_break_message([result()])
         self.assertIn("<b>🔥 BULLISH BREAKOUT</b>", message)
@@ -87,11 +111,13 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("Sector: Barang Baku &amp; Industri\n\nEntry Area", message)
         self.assertIn("TP 1: 541 (+6.1%)", message)
         self.assertIn("RBS: 505", message)
-        self.assertIn("Total: 1 saham bullish breakout", message)
+        self.assertNotIn("Total:", message)
 
     def test_strong_buy_uses_supertrend_support_without_stop_loss(self):
         message = format_strong_buy_message([result()])
-        self.assertIn("<b>🚀 STRONG BUY H1</b>", message)
+        self.assertIn("<b>🚀 STRONG BUY</b>", message)
+        self.assertNotIn("Score", message)
+        self.assertIn("Vol 1.4x | Val 1,2B", message)
         self.assertIn("Trend IHSG: SIDEWAYS", message)
         self.assertIn("Sector: Barang Baku &amp; Industri", message)
         self.assertIn("Val 1,2B\n\nTrend IHSG", message)
@@ -104,7 +130,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
 
     def test_early_entry_maps_bull_regime_and_uses_support(self):
         message = format_early_entry_message([result(market_regime="BULL")])
-        self.assertIn("<b>🎯 EARLY ENTRY H1 (SEROK BAWAH)</b>", message)
+        self.assertIn("<b>🎯 EARLY ENTRY</b>", message)
         self.assertIn("Trend IHSG: BULLISH", message)
         self.assertIn("Sector: Barang Baku &amp; Industri", message)
         self.assertIn("Val 1,2B\n\nTrend IHSG", message)

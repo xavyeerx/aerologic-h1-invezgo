@@ -79,20 +79,18 @@ Klaim dilakukan sebelum pengiriman batch. Karena itu, kegagalan Telegram setelah
 ## Contoh Alert Telegram
 
 ```text
-🚀 STRONG BUY H1
+🚀 STRONG BUY
 --------------------------
 28 Aug 2026, 14:01 WIB
 
 PACK | 510 (+9.4%)
-Score 85 | Vol 1.4x | Val 1,2B
+Vol 1.4x | Val 1,2B
 Trend IHSG: SIDEWAYS
 TP1: 541 (+6.1%)
 TP2: 587 (+15.1%) ATR
 Support: 480
 
 Pastikan area Support (480) dijaga agar momentum masih bullish.
-
-Total: 1 saham strong buy
 
 Powered by Aerologic
 ```
