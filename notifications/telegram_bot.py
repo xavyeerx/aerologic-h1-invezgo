@@ -69,40 +69,40 @@ def _append_news_context(lines: List[str], result) -> None:
         return
 
     ticker = escape(str(result.ticker).replace(".JK", ""))
-    lines.extend(["", f"<b>📰 KONTEKS &amp; KATALIS {ticker}</b>", ""])
+    lines.extend(["", f"<b>📰 KONTEKS &amp; KATALIS {ticker}</b>"])
     if context.direct is None:
         lines.append("Katalis langsung: Tidak ditemukan")
     else:
         sentiment = "Positif" if context.direct.sentiment == "positive" else "Negatif/Risiko"
-        lines.append(
+        lines.extend([
             f"Katalis langsung: {sentiment} — "
-            f"{format_context_date(context.direct.published_at)}: "
-            f"{_sanitize_context_text(context.direct.title)}"
-        )
+            f"{format_context_date(context.direct.published_at)}:",
+            _sanitize_context_text(context.direct.title),
+        ])
 
     if context.positives:
-        lines.extend(["", "Positif:"])
+        lines.append("Positif:")
         lines.extend(_format_context_item(item) for item in context.positives)
     if context.risks:
-        lines.extend(["", "Negatif/Risiko:"])
+        lines.append("Negatif/Risiko:")
         lines.extend(_format_context_item(item) for item in context.risks)
 
-    lines.extend(["", "Kesimpulan:"])
     if context.direct is None:
-        lines.extend([
-            "Momentum teknikal belum didukung katalis baru yang terverifikasi.",
-            "Waspadai volatilitas dan risiko aksi harga spekulatif.",
-        ])
+        conclusion = (
+            "Momentum teknikal belum didukung katalis baru yang terverifikasi. "
+            "Waspadai volatilitas dan risiko aksi harga spekulatif."
+        )
     elif context.direct.sentiment == "positive":
-        lines.extend([
-            "Momentum teknikal memiliki katalis positif terbaru yang teridentifikasi.",
-            "Konfirmasi keberlanjutan respons harga dan tetap disiplin pada batas risiko.",
-        ])
+        conclusion = (
+            "Momentum teknikal memiliki katalis positif terbaru yang teridentifikasi. "
+            "Konfirmasi keberlanjutan respons harga dan tetap disiplin pada batas risiko."
+        )
     else:
-        lines.extend([
-            "Momentum teknikal disertai risiko material terbaru yang perlu diperhatikan.",
-            "Waspadai volatilitas dan tetap disiplin pada batas risiko.",
-        ])
+        conclusion = (
+            "Momentum teknikal disertai risiko material terbaru yang perlu diperhatikan. "
+            "Waspadai volatilitas dan tetap disiplin pada batas risiko."
+        )
+    lines.extend(["", f"Kesimpulannya {conclusion}"])
 
 def send_telegram_message(
     message: str,

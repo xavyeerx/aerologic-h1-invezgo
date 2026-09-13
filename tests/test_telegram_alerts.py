@@ -180,6 +180,42 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("Momentum teknikal belum didukung katalis baru", message)
         self.assertNotIn("Invezgo", message)
 
+    def test_news_context_uses_compact_layout(self):
+        wib = pytz.timezone("Asia/Jakarta")
+        context = NewsContext(
+            direct=NewsContextItem(
+                "PACK Meraih Kontrak Baru Senilai Rp1,2 Triliun",
+                wib.localize(datetime(2026, 9, 12, 10, 0)),
+                "positive",
+            ),
+            positives=(NewsContextItem(
+                "Pendapatan PACK Tumbuh 24 Persen pada Semester I",
+                wib.localize(datetime(2026, 9, 8, 9, 30)),
+                "positive",
+            ),),
+            risks=(NewsContextItem(
+                "BEI Mencermati Peningkatan Volatilitas Transaksi PACK",
+                wib.localize(datetime(2026, 9, 10, 14, 15)),
+                "risk",
+            ),),
+        )
+
+        message = format_strong_buy_message([result(news_context=context)])
+
+        compact_context = (
+            "<b>📰 KONTEKS &amp; KATALIS PACK</b>\n"
+            "Katalis langsung: Positif — 12 Sep:\n"
+            "PACK Meraih Kontrak Baru Senilai Rp1,2 Triliun\n"
+            "Positif:\n"
+            "• 8 Sep: Pendapatan PACK Tumbuh 24 Persen pada Semester I\n"
+            "Negatif/Risiko:\n"
+            "• 10 Sep: BEI Mencermati Peningkatan Volatilitas Transaksi PACK\n\n"
+            "Kesimpulannya Momentum teknikal memiliki katalis positif terbaru yang "
+            "teridentifikasi. Konfirmasi keberlanjutan respons harga dan tetap disiplin "
+            "pada batas risiko."
+        )
+        self.assertIn(compact_context, message)
+
     def test_early_entry_maps_bull_regime_and_uses_support(self):
         message = format_early_entry_message([result(market_regime="BULL")])
         self.assertIn("<b>🎯 EARLY ENTRY</b>", message)
