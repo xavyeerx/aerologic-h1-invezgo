@@ -5,11 +5,12 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260913-deterministic-news-context"
+SCANNER_BUILD_ID = "20260913-operational-alerts"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+TELEGRAM_TEST_CHAT_ID = os.getenv("TELEGRAM_TEST_CHAT_ID", "")
 
 
 def _env_int_or_none(name: str):

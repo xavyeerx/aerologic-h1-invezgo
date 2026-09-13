@@ -32,8 +32,11 @@ py main.py
 ```env
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
+TELEGRAM_TEST_CHAT_ID=
 TELEGRAM_SCANNER_TOPIC_ID=699
 ```
+
+`TELEGRAM_TEST_CHAT_ID` menerima event startup, error, dan stop tanpa topic.
 
 Untuk mencari `message_thread_id`, kirim satu pesan di topic tujuan lalu jalankan:
 

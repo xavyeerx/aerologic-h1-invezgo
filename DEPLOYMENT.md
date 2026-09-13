@@ -106,6 +106,7 @@ Isi minimal:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=-1004302626864
+TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 
@@ -114,6 +115,9 @@ Kalau pakai Telegram Topics, tambahkan:
 ```dotenv
 TELEGRAM_SCANNER_TOPIC_ID=699
 ```
+
+`TELEGRAM_TEST_CHAT_ID` menerima event operasional startup, error, dan stop
+langsung ke chat tanpa topic.
 
 ## 4. Test Sebelum Service
 

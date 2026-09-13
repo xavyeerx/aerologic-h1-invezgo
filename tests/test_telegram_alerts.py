@@ -33,6 +33,31 @@ def result(**overrides):
 
 
 class TelegramAlertFormattingTests(unittest.TestCase):
+    def test_operational_event_targets_test_chat_without_topic(self):
+        response = SimpleNamespace(status_code=200, text="ok")
+        with patch.object(telegram_bot, "TELEGRAM_BOT_TOKEN", "token"), patch.object(
+            telegram_bot, "TELEGRAM_TEST_CHAT_ID", "-100-monitoring"
+        ), patch.object(telegram_bot.requests, "post", return_value=response) as post:
+            sent = telegram_bot.send_operational_event(
+                "ERROR", "Scan error: ValueError: bad <value>"
+            )
+
+        self.assertTrue(sent)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["chat_id"], "-100-monitoring")
+        self.assertNotIn("message_thread_id", payload)
+        self.assertIn("AEROLOGIC H1 ERROR", payload["text"])
+        self.assertIn("bad &lt;value&gt;", payload["text"])
+
+    def test_operational_event_requires_test_chat(self):
+        with patch.object(telegram_bot, "TELEGRAM_BOT_TOKEN", "token"), patch.object(
+            telegram_bot, "TELEGRAM_TEST_CHAT_ID", ""
+        ), patch.object(telegram_bot.requests, "post") as post:
+            sent = telegram_bot.send_operational_event("STARTED")
+
+        self.assertFalse(sent)
+        post.assert_not_called()
+
     def test_backend_sync_is_disabled_by_default(self):
         with patch.object(telegram_bot, "SIGNAL_API_ENABLED", False), patch.object(
             telegram_bot.requests, "post"

@@ -6,9 +6,11 @@
 import logging
 import logging.handlers
 import os
+import signal
+import socket
 import subprocess
 import sys
-import time
+import threading
 from datetime import datetime, time as dtime, timedelta
 
 import pytz
@@ -24,7 +26,7 @@ WIB = pytz.timezone("Asia/Jakarta")
 from config.settings import SCANNER_BUILD_ID
 from database.state_manager import StateManager
 from main import run_scan
-from notifications.telegram_bot import send_telegram_message
+from notifications.telegram_bot import send_operational_event
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +46,18 @@ AFTERNOON_SCAN_START = dtime(13, 31)
 FRIDAY_AFTERNOON_SCAN_START = dtime(14, 1)
 AFTERNOON_SCAN_END = dtime(16, 1)
 SCAN_INTERVAL_SECONDS = 5 * 60
+_shutdown_event = threading.Event()
+_shutdown_signal_name = "shutdown"
+
+
+def _handle_shutdown_signal(signum, _frame) -> None:
+    global _shutdown_signal_name
+    try:
+        _shutdown_signal_name = signal.Signals(signum).name
+    except ValueError:
+        _shutdown_signal_name = str(signum)
+    logger.info("Menerima %s; scheduler akan dihentikan.", _shutdown_signal_name)
+    _shutdown_event.set()
 
 def _today_at(t: dtime, tz=WIB) -> datetime:
     return datetime.now(tz).replace(hour=t.hour, minute=t.minute, second=t.second, microsecond=0)
@@ -71,11 +85,11 @@ def smart_sleep_until(target: datetime, label: str) -> None:
         label,
         target.strftime("%d-%b %H:%M"),
     )
-    while True:
+    while not _shutdown_event.is_set():
         remaining = seconds_until(target)
         if remaining <= 1:
             break
-        time.sleep(min(remaining, 30 * 60))
+        _shutdown_event.wait(min(remaining, 30 * 60))
 
 
 def scan_slots_for_day(now: datetime) -> list[datetime]:
@@ -140,29 +154,43 @@ def ensure_single_scheduler_process() -> None:
 
 
 def main() -> None:
-    os.makedirs(os.path.join(_PROJECT_ROOT, "database"), exist_ok=True)
-    pause_file = os.path.join(_PROJECT_ROOT, "database", "PAUSE_SCHEDULER")
-    if os.path.exists(pause_file):
-        logger.warning("PAUSE_SCHEDULER aktif. Hapus %s untuk mulai.", pause_file)
-        return
+    global _shutdown_signal_name
+    _shutdown_event.clear()
+    _shutdown_signal_name = "shutdown"
+    signal.signal(signal.SIGTERM, _handle_shutdown_signal)
+    signal.signal(signal.SIGINT, _handle_shutdown_signal)
+    started = False
+    try:
+        os.makedirs(os.path.join(_PROJECT_ROOT, "database"), exist_ok=True)
+        pause_file = os.path.join(_PROJECT_ROOT, "database", "PAUSE_SCHEDULER")
+        if os.path.exists(pause_file):
+            logger.warning("PAUSE_SCHEDULER aktif. Hapus %s untuk mulai.", pause_file)
+            return
 
-    ensure_single_scheduler_process()
-    logger.info("=" * 50)
-    logger.info("aerologic H1 scheduler")
-    logger.info("Build: %s", SCANNER_BUILD_ID)
-    logger.info("Instance: pid=%d root=%s", os.getpid(), _PROJECT_ROOT)
-    logger.info("Scan tiap 5 menit; indikator memakai latest H1 termasuk forming candle")
-    logger.info("=" * 50)
+        ensure_single_scheduler_process()
+        logger.info("=" * 50)
+        logger.info("aerologic H1 scheduler")
+        logger.info("Build: %s", SCANNER_BUILD_ID)
+        logger.info("Instance: pid=%d root=%s", os.getpid(), _PROJECT_ROOT)
+        logger.info("Scan tiap 5 menit; indikator memakai latest H1 termasuk forming candle")
+        logger.info("=" * 50)
 
-    state_manager = StateManager()
-    last_scan_slot: datetime | None = None
+        state_manager = StateManager()
+        last_scan_slot: datetime | None = None
+        send_operational_event(
+            "STARTED",
+            f"Host: {socket.gethostname()} | PID: {os.getpid()}",
+            "Schedule: every 5 minutes during IDX sessions",
+        )
+        started = True
 
-    while True:
-        try:
+        while not _shutdown_event.is_set():
             now = datetime.now(WIB)
             target, label = next_event(now)
             if seconds_until(target) > 2:
                 smart_sleep_until(target, label)
+            if _shutdown_event.is_set():
+                break
 
             # Setelah bangun: `target` adalah slot yang harus dijalankan.
             # JANGAN panggil next_scan_slot lagi — fungsi itu selalu
@@ -182,7 +210,10 @@ def main() -> None:
                     run_scan(state_manager, force=True)
                 except Exception as exc:
                     logger.exception("Scan error")
-                    send_telegram_message(f"Warning Scanner Error: {type(exc).__name__}: {exc}")
+                    send_operational_event(
+                        "ERROR",
+                        f"Scan error: {type(exc).__name__}: {exc}",
+                    )
             elif elapsed >= slot_window:
                 logger.warning(
                     "Slot %s dilewati (terlambat %.0fs > window %.0fs), skip.",
@@ -191,15 +222,23 @@ def main() -> None:
                     slot_window,
                 )
 
-            time.sleep(30)
+            _shutdown_event.wait(30)
 
-        except KeyboardInterrupt:
-            logger.info("Scheduler dihentikan.")
-            send_telegram_message("aerologic H1 scanner stopped")
-            break
-        except Exception as exc:
-            logger.error("Scheduler error tak terduga: %s", exc)
-            time.sleep(60)
+    except Exception as exc:
+        logger.exception("Scheduler error tak terduga")
+        send_operational_event(
+            "ERROR",
+            f"Scheduler error: {type(exc).__name__}: {exc}",
+        )
+        raise
+    finally:
+        if started:
+            logger.info("Scheduler dihentikan (%s).", _shutdown_signal_name)
+            send_operational_event(
+                "STOPPED",
+                f"Host: {socket.gethostname()} | PID: {os.getpid()}",
+                f"Reason: {_shutdown_signal_name}",
+            )
 
 
 if __name__ == "__main__":

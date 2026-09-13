@@ -138,6 +138,7 @@ Isi minimal pada `.env`:
 ```dotenv
 TELEGRAM_BOT_TOKEN=replace_me
 TELEGRAM_CHAT_ID=replace_me
+TELEGRAM_TEST_CHAT_ID=replace_me
 INVEZGO_API_KEY=replace_me
 ```
 
@@ -146,6 +147,10 @@ Jika grup Telegram menggunakan Topics:
 ```dotenv
 TELEGRAM_SCANNER_TOPIC_ID=replace_me
 ```
+
+Alert saham dikirim ke `TELEGRAM_CHAT_ID`/`TELEGRAM_SCANNER_TOPIC_ID`.
+Event operasional startup, error, dan stop dikirim terpisah ke
+`TELEGRAM_TEST_CHAT_ID` tanpa topic.
 
 Telegram adalah transport alert utama. Sinkronisasi backend default-nya nonaktif
 untuk mencegah endpoint sekunder mengirim ulang alert. Aktifkan hanya jika endpoint
@@ -267,7 +272,7 @@ Pastikan `INVEZGO_API_KEY` tersedia di `.env` atau environment service.
 
 ### Telegram tidak mengirim pesan
 
-Periksa `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, topic ID, koneksi jaringan, dan log `logs/scanner.log`. Tanpa konfigurasi Telegram, fungsi pengiriman hanya mencatat warning dan menganggap operasi berhasil untuk mode lokal.
+Periksa `TELEGRAM_BOT_TOKEN`, chat ID, topic ID, koneksi jaringan, dan log `logs/scanner.log`. Untuk event operasional, periksa juga `TELEGRAM_TEST_CHAT_ID`. Tanpa konfigurasi Telegram, fungsi pengiriman alert hanya mencatat warning dan menganggap operasi berhasil untuk mode lokal.
 
 ### Tidak ada alert
 

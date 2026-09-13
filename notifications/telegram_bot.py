@@ -10,11 +10,13 @@ import requests
 from core.news_context import format_context_date
 
 from config.settings import (
+    SCANNER_BUILD_ID,
     SIGNAL_API_ENABLED,
     SIGNAL_API_URL,
     TELEGRAM_BOT_TOKEN,
     TELEGRAM_CHAT_ID,
     TELEGRAM_SCANNER_TOPIC_ID,
+    TELEGRAM_TEST_CHAT_ID,
 )
 
 logger = logging.getLogger(__name__)
@@ -137,6 +139,28 @@ def send_telegram_message(
     except Exception as exc:
         logger.error("Error sending Telegram message: %s", exc)
         return False
+
+
+def send_operational_event(event: str, *details: str) -> bool:
+    """Send scheduler lifecycle/error events to the isolated monitoring chat."""
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_TEST_CHAT_ID:
+        logger.warning(
+            "Telegram operational channel not configured; event %s was not sent",
+            event,
+        )
+        return False
+
+    lines = [
+        f"<b>AEROLOGIC H1 {escape(str(event).upper())}</b>",
+        get_current_time_wib(),
+        f"Build: <code>{escape(SCANNER_BUILD_ID)}</code>",
+    ]
+    lines.extend(escape(str(detail)) for detail in details if detail)
+    return send_telegram_message(
+        "\n".join(lines),
+        chat_id=TELEGRAM_TEST_CHAT_ID,
+        use_default_thread=False,
+    )
 
 
 def _format_tp_info(result, *, spaced_labels: bool = False) -> str:
