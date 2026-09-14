@@ -182,12 +182,15 @@ def _request(method: str, path: str, *, category: str,
             logger.error("Invezgo 429 %s — menyerah (throttle). Skip request ini.", path)
             raise last_err
 
-        _bump_quota(category)  # hanya hitung request yang benar-benar dilayani
-
         if resp.status_code >= 400:
             # Error non-transient (400/401/403/404 dst) — jangan retry
             body = resp.text[:300]
             raise InvezgoError(f"HTTP {resp.status_code} {path}: {body}")
+        if not 200 <= resp.status_code < 300:
+            raise InvezgoError(f"HTTP {resp.status_code} {path}: response non-2xx")
+
+        # Invezgo only charges successful 2xx requests.
+        _bump_quota(category)
 
         try:
             return resp.json()

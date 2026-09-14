@@ -23,7 +23,8 @@ os.makedirs(_LOG_DIR, exist_ok=True)
 
 WIB = pytz.timezone("Asia/Jakarta")
 
-from config.settings import SCANNER_BUILD_ID
+from config.settings import CHART_PATTERN_ENABLED, SCANNER_BUILD_ID
+from core.chart_pattern_review import run_daily_chart_pattern_review
 from database.state_manager import StateManager
 from main import run_scan
 from notifications.telegram_bot import send_operational_event
@@ -44,8 +45,10 @@ MORNING_SCAN_START = dtime(9, 1)
 MORNING_SCAN_END = dtime(12, 0)
 AFTERNOON_SCAN_START = dtime(13, 31)
 FRIDAY_AFTERNOON_SCAN_START = dtime(14, 1)
-AFTERNOON_SCAN_END = dtime(16, 1)
+AFTERNOON_SCAN_END = dtime(15, 51)
 SCAN_INTERVAL_SECONDS = 5 * 60
+CHART_PATTERN_REVIEW_TIME = dtime(16, 30)
+CHART_PATTERN_GRACE_SECONDS = 30 * 60
 _shutdown_event = threading.Event()
 _shutdown_signal_name = "shutdown"
 
@@ -94,9 +97,9 @@ def smart_sleep_until(target: datetime, label: str) -> None:
 
 def scan_slots_for_day(now: datetime) -> list[datetime]:
     session_ranges = (
-        ((dtime(9, 1), dtime(11, 31)), (dtime(14, 1), dtime(16, 16)))
+        ((dtime(9, 1), dtime(11, 31)), (dtime(14, 1), AFTERNOON_SCAN_END))
         if now.weekday() == 4
-        else ((dtime(9, 1), dtime(12, 1)), (dtime(13, 31), dtime(16, 16)))
+        else ((dtime(9, 1), dtime(12, 1)), (dtime(13, 31), AFTERNOON_SCAN_END))
     )
     slots: list[datetime] = []
     for start, end in session_ranges:
@@ -119,10 +122,19 @@ def next_scan_slot(now: datetime) -> datetime | None:
     return None
 
 
-def next_event(now: datetime) -> tuple[datetime, str]:
+def next_event(now: datetime, *, include_chart_pattern: bool = True) -> tuple[datetime, str]:
     scan_at = next_scan_slot(now)
     if scan_at is not None:
         return scan_at, f"Scan ({scan_at.strftime('%H:%M')})"
+    if CHART_PATTERN_ENABLED and include_chart_pattern and now.weekday() < 5:
+        review_at = now.replace(
+            hour=CHART_PATTERN_REVIEW_TIME.hour,
+            minute=CHART_PATTERN_REVIEW_TIME.minute,
+            second=0,
+            microsecond=0,
+        )
+        if now <= review_at + timedelta(seconds=CHART_PATTERN_GRACE_SECONDS):
+            return review_at, "Chart pattern review (16:30)"
     return _next_weekday_scan(), "Scan hari kerja berikutnya"
 
 
@@ -177,6 +189,7 @@ def main() -> None:
 
         state_manager = StateManager()
         last_scan_slot: datetime | None = None
+        last_pattern_attempt_date = None
         send_operational_event(
             "STARTED",
             f"Host: {socket.gethostname()} | PID: {os.getpid()}",
@@ -186,7 +199,10 @@ def main() -> None:
 
         while not _shutdown_event.is_set():
             now = datetime.now(WIB)
-            target, label = next_event(now)
+            target, label = next_event(
+                now,
+                include_chart_pattern=last_pattern_attempt_date != now.date(),
+            )
             if seconds_until(target) > 2:
                 smart_sleep_until(target, label)
             if _shutdown_event.is_set():
@@ -197,9 +213,21 @@ def main() -> None:
             # mengembalikan slot masa depan, bukan slot yang baru saja tiba.
             now = datetime.now(WIB)
             elapsed = (now - target).total_seconds()
-            slot_window = SCAN_INTERVAL_SECONDS - 5
+            is_pattern_review = label.startswith("Chart pattern review")
+            slot_window = CHART_PATTERN_GRACE_SECONDS if is_pattern_review else SCAN_INTERVAL_SECONDS - 5
 
-            if target != last_scan_slot and elapsed < slot_window:
+            if is_pattern_review and elapsed < slot_window:
+                last_pattern_attempt_date = now.date()
+                logger.info("Menjalankan chart-pattern review TF-D untuk %s", now.date())
+                try:
+                    run_daily_chart_pattern_review(now=now)
+                except Exception as exc:
+                    logger.exception("Chart-pattern review error")
+                    send_operational_event(
+                        "ERROR",
+                        f"Chart-pattern review error: {type(exc).__name__}: {exc}",
+                    )
+            elif target != last_scan_slot and elapsed < slot_window:
                 last_scan_slot = target
                 logger.info(
                     "Menjalankan scan untuk slot %s (terlambat %.0fs)",

@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
-SCANNER_BUILD_ID = "20260913-operational-alerts"
+SCANNER_BUILD_ID = "20260913-daily-chart-patterns"
 
 # Telegram
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -117,6 +117,30 @@ DIV_VOLUME_DECLINE_RATIO = 1.5
 
 # Logic settings
 MIN_DAILY_TURNOVER = 5_000_000_000
+
+# Daily chart-pattern review. One broad screener request supplies today's OHLCV
+# and ranks the universe; stock-chart requests are only used to bootstrap/repair
+# the rolling local cache.
+CHART_PATTERN_ENABLED = os.getenv("CHART_PATTERN_ENABLED", "true").strip().lower() in {
+    "1", "true", "yes", "on"
+}
+CHART_PATTERN_UNIVERSE_LIMIT = max(
+    1, int(os.getenv("CHART_PATTERN_UNIVERSE_LIMIT", "240"))
+)
+CHART_PATTERN_HISTORY_DAYS = max(
+    120, int(os.getenv("CHART_PATTERN_HISTORY_DAYS", "210"))
+)
+CHART_PATTERN_CACHE_BARS = max(
+    90, int(os.getenv("CHART_PATTERN_CACHE_BARS", "160"))
+)
+CHART_PATTERN_BOOTSTRAP_LIMIT = max(
+    0, int(os.getenv("CHART_PATTERN_BOOTSTRAP_LIMIT", "240"))
+)
+CHART_PATTERN_MIN_TURNOVER = float(
+    os.getenv("CHART_PATTERN_MIN_TURNOVER", str(MIN_DAILY_TURNOVER))
+)
+CHART_PATTERN_BREAK_BUFFER = float(os.getenv("CHART_PATTERN_BREAK_BUFFER", "0.00125"))
+CHART_PATTERN_TOUCH_ATR_MULT = float(os.getenv("CHART_PATTERN_TOUCH_ATR_MULT", "0.60"))
 
 # Deterministic news context enrichment. No LLM is used.
 NEWS_CONTEXT_ENABLED = os.getenv("NEWS_CONTEXT_ENABLED", "true").strip().lower() in {

@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 WIB = pytz.timezone("Asia/Jakarta")
 
-MONTHLY_QUOTA = int(os.getenv("INVEZGO_MONTHLY_QUOTA", "65000"))
+MONTHLY_QUOTA = int(os.getenv("INVEZGO_MONTHLY_QUOTA", "30000"))
 WARN_PCT = float(os.getenv("INVEZGO_QUOTA_WARN_PCT", "90"))
 BREAK_PCT = float(os.getenv("INVEZGO_QUOTA_BREAK_PCT", "95"))
 

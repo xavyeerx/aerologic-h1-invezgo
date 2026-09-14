@@ -1,6 +1,6 @@
 # aerologic
 
-aerologic adalah scanner saham Indonesia berbasis H1 intrabar untuk riset kuantitatif dan market intelligence. Bot memindai setiap 5 menit dan mengizinkan forming candle 60 menit memicu sinyal sebelum close.
+aerologic adalah scanner saham Indonesia berbasis H1 intrabar dan review pola chart Daily untuk riset kuantitatif dan market intelligence. Bot memindai H1 setiap 5 menit dan mereviu empat pola TF-D setiap hari kerja pukul 16:30 WIB.
 
 > Alert adalah keluaran riset, bukan rekomendasi investasi. Validasi strategi, kualitas data, likuiditas, slippage, dan manajemen risiko tetap diperlukan sebelum mengambil keputusan.
 
@@ -110,11 +110,17 @@ Scheduler menggunakan zona waktu `Asia/Jakarta`:
 
 | Hari | Sesi scan |
 | --- | --- |
-| Senin–Kamis | 09:01–12:00 dan 13:31–16:01 WIB |
-| Jumat | 09:01–12:00 dan 14:01–16:01 WIB |
+| Senin–Kamis | 09:01–12:01 dan 13:31–15:51 WIB |
+| Jumat | 09:01–11:31 dan 14:01–15:51 WIB |
 | Sabtu–Minggu | Tidak ada scan |
 
 Interval scan adalah lima menit. Scheduler menolak proses duplikat pada sistem yang mendukung `pgrep`. Membuat file `database/PAUSE_SCHEDULER` sebelum startup akan mencegah scheduler berjalan.
+
+Setelah scan H1 terakhir, scheduler menjalankan review `Break the Base`,
+`Symmetrical Triangle Breakout`, `Falling Wedge Breakout`, dan `Bullish Pennant`
+pukul 16:30 WIB. Universe adalah 240 saham teratas berdasarkan average traded value
+lima hari dari Invezgo. Rolling cache membuat biaya normal hanya satu request indeks
+dan satu screener per hari; history chart diambil saat bootstrap/repair saja.
 
 ## Persyaratan
 
@@ -183,6 +189,15 @@ Menjalankan satu scan secara paksa:
 python main.py
 ```
 
+Preview chart-pattern review tanpa mengirim Telegram (tetap memakai API):
+
+```powershell
+python scripts/run_chart_pattern_review.py --dry-run --force --limit 10
+```
+
+Pada weekend/libur, tambahkan `--use-latest-bar` untuk menguji candle pasar terakhir.
+Flag ini hanya diizinkan bersama `--dry-run`, sehingga tidak dapat mengirim alert lama.
+
 `main.py` menggunakan `force=True`; perintah ini dapat melakukan request API dan mengirim alert jika sinyal lolos. Untuk detail operasi lokal lihat [CARA_RUN.md](CARA_RUN.md), dan untuk VPS/systemd lihat [DEPLOYMENT.md](DEPLOYMENT.md).
 
 ## Konfigurasi Utama
@@ -196,7 +211,7 @@ Nilai default berada di `config/settings.py`; parameter operasional tertentu dap
 | `INVEZGO_RATE_PER_SEC` | `3` | Batas laju request global |
 | `INVEZGO_TIMEOUT` | `10` | Timeout request dalam detik |
 | `INVEZGO_MAX_RETRIES` | `3` | Retry error jaringan |
-| `INVEZGO_MONTHLY_QUOTA` | `65000` | Kuota bulanan yang dipantau |
+| `INVEZGO_MONTHLY_QUOTA` | `30000` | Kuota bulanan konservatif; sesuaikan paket aktif |
 | `INVEZGO_QUOTA_WARN_PCT` | `90` | Ambang peringatan kuota |
 | `INVEZGO_QUOTA_BREAK_PCT` | `95` | Ambang penghentian fetch chart |
 | `NEWS_CONTEXT_ENABLED` | `true` | Aktifkan enrichment news/disclosure tanpa AI |
@@ -205,6 +220,9 @@ Nilai default berada di `config/settings.py`; parameter operasional tertentu dap
 | `NEWS_CONTEXT_MAX_ITEMS_PER_GROUP` | `2` | Maksimum berita positif dan risiko per ticker |
 | `NEWS_CONTEXT_WORKERS` | `4` | Jumlah thread enrichment ticker |
 | `SCREEN_VOLUME_MIN_FACTOR` | `0.005` | Floor faktor volume screener |
+| `CHART_PATTERN_ENABLED` | `true` | Aktifkan review TF-D pukul 16:30 |
+| `CHART_PATTERN_UNIVERSE_LIMIT` | `240` | Jumlah saham terlikuid yang direviu |
+| `CHART_PATTERN_BOOTSTRAP_LIMIT` | `240` | Maksimum history fetch untuk bootstrap/repair per run |
 | `STRONG_BUY_MAX_CHANGE_PCT` | `12.0` | Batas maksimum perubahan sesi Strong Buy |
 | `STRONG_BUY_STOCH_RSI_MAX` | `60.0` | Batas eksklusif Stoch RSI K pada regime Sideways/Bear |
 | `REVERSAL_MAX_RETURN20` | `-8.0` | Maximum return Reversal Watch |

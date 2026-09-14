@@ -35,6 +35,18 @@ INVEZGO_DAILY_CONTRACT = BarContract(
     reason="Daily bars are retained for compatibility and are not production signals",
 )
 
+INVEZGO_DAILY_PATTERN_CONTRACT = BarContract(
+    scheme="invezgo_daily_pattern_v1",
+    timeframe="1d",
+    reference_source="invezgo",
+    parity_validated=True,
+    signal_eligible=True,
+    reason=(
+        "Daily OHLCV validated against the same-day Invezgo screener; "
+        "review runs only after the COMPOSITE daily candle is available"
+    ),
+)
+
 
 
 

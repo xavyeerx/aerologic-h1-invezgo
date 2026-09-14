@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 
 from core.data_provider import _rows_to_h1_ohlc_df
-from scheduler import scan_slots_for_day
+from scheduler import next_event, scan_slots_for_day
 
 
 WIB = pytz.timezone("Asia/Jakarta")
@@ -34,7 +34,7 @@ class H1MarketSessionTests(unittest.TestCase):
         self.assertEqual(len(frame), 1)
         self.assertTrue(frame.attrs["latest_bar_closed"])
 
-    def test_scheduler_runs_every_five_minutes_and_includes_bucket_closes(self):
+    def test_scheduler_runs_every_five_minutes_until_1551(self):
         monday = WIB.localize(datetime(2026, 9, 7, 8, 0))
         slots = scan_slots_for_day(monday)
         labels = [slot.strftime("%H:%M") for slot in slots]
@@ -42,7 +42,15 @@ class H1MarketSessionTests(unittest.TestCase):
         self.assertEqual((slots[1] - slots[0]).total_seconds(), 300)
         self.assertIn("10:01", labels)
         self.assertIn("12:01", labels)
-        self.assertIn("16:16", labels)
+        self.assertEqual(labels[-1], "15:51")
+        self.assertNotIn("16:01", labels)
+        self.assertNotIn("16:16", labels)
+
+    def test_chart_pattern_review_is_next_event_after_last_h1_scan(self):
+        monday = WIB.localize(datetime(2026, 9, 7, 16, 0))
+        target, label = next_event(monday)
+        self.assertEqual(target.strftime("%H:%M"), "16:30")
+        self.assertIn("Chart pattern", label)
 
 
 if __name__ == "__main__":
