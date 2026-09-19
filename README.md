@@ -164,7 +164,8 @@ dipastikan tidak meneruskan pesan ke Telegram:
 
 ```dotenv
 SIGNAL_API_ENABLED=true
-SIGNAL_API_URL=https://example.com/api/signals
+SIGNAL_API_URL=https://aerologicbot-web-app-vb11.vercel.app/api/ticker-alert
+BACKEND_WEBHOOK_SECRET=<secret>
 ```
 
 Secret tidak boleh ditulis langsung ke source code atau di-commit. `.env` sudah dikecualikan oleh `.gitignore`.

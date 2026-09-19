@@ -62,20 +62,56 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         with patch.object(telegram_bot, "SIGNAL_API_ENABLED", False), patch.object(
             telegram_bot.requests, "post"
         ) as post:
-            _send_to_api([result()], "strong_buy")
+            _send_to_api(result(), "Strong Buy")
         post.assert_not_called()
 
-    def test_backend_sync_runs_once_for_an_alert_batch(self):
+    def test_backend_sync_posts_ticker_alert_with_secret(self):
+        response = SimpleNamespace(ok=True, status_code=200, text="ok")
+        with patch.object(telegram_bot, "SIGNAL_API_ENABLED", True), patch.object(
+            telegram_bot, "SIGNAL_API_URL", "https://example.test/api/ticker-alert"
+        ), patch.object(telegram_bot, "BACKEND_WEBHOOK_SECRET", "s3cret"), patch.object(
+            telegram_bot.requests, "post", return_value=response
+        ) as post:
+            _send_to_api(result(), "Breakout")
+
+        self.assertEqual(post.call_args.args[0], "https://example.test/api/ticker-alert")
+        self.assertEqual(post.call_args.kwargs["headers"], {"x-webhook-secret": "s3cret"})
+        payload = post.call_args.kwargs["json"]
+        alerted_at = payload.pop("alerted_at")
+        self.assertEqual(payload, {
+            "ticker": "PACK", "entry_low": 500, "entry_high": 510,
+            "tp_price": 541, "sl": 480, "alert_type": "Breakout",
+        })
+        self.assertTrue(alerted_at.endswith("+07:00"))
+
+    def test_backend_sync_nulls_prices_hidden_from_telegram(self):
+        payload = telegram_bot._build_api_payload(
+            result(price=550.0, tp1=540.0, sl=560.0, entry_zone_low=0.0), "Strong Buy"
+        )
+        self.assertIsNone(payload["tp_price"])
+        self.assertIsNone(payload["sl"])
+        self.assertIsNone(payload["entry_low"])
+        self.assertIsNone(payload["entry_high"])
+
+    def test_backend_sync_requires_secret(self):
+        with patch.object(telegram_bot, "SIGNAL_API_ENABLED", True), patch.object(
+            telegram_bot, "BACKEND_WEBHOOK_SECRET", ""
+        ), patch.object(telegram_bot.requests, "post") as post:
+            _send_to_api(result(), "Strong Buy")
+        post.assert_not_called()
+
+    def test_backend_sync_only_for_tickers_sent_to_telegram(self):
+        results = [result(ticker="PACK.JK"), result(ticker="RAJA.JK"), result(ticker="PACK.JK")]
         with patch.object(
-            telegram_bot, "_chunked_alert_messages", return_value=["part 1", "part 2"]
-        ), patch.object(
-            telegram_bot, "send_telegram_message", return_value=True
+            telegram_bot, "send_telegram_message", side_effect=[False, True]
         ), patch.object(telegram_bot, "_send_to_api") as send_api:
             sent = telegram_bot.send_chunked_alert(
-                [result()], format_strong_buy_message, alert_type="strong_buy"
+                results, format_strong_buy_message, alert_type="Strong Buy"
             )
-        self.assertEqual(sent, 2)
+        self.assertEqual(sent, 1)
         send_api.assert_called_once()
+        self.assertEqual(send_api.call_args.args[0].ticker, "RAJA.JK")
+        self.assertEqual(send_api.call_args.args[1], "Strong Buy")
 
     def test_targets_at_or_below_alert_price_are_hidden(self):
         message = format_strong_buy_message([result(price=550.0, tp1=540.0, tp2=550.0)])

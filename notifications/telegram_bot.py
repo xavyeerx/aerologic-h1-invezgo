@@ -10,6 +10,7 @@ import requests
 from core.news_context import format_context_date
 
 from config.settings import (
+    BACKEND_WEBHOOK_SECRET,
     SCANNER_BUILD_ID,
     SIGNAL_API_ENABLED,
     SIGNAL_API_URL,
@@ -193,63 +194,51 @@ def _format_entry_and_sl(result) -> str:
 def _format_market_regime(result) -> str:
     regime = str(getattr(result, "market_regime", "UNKNOWN") or "UNKNOWN").upper()
     return {"BULL": "BULLISH", "BEAR": "BEARISH"}.get(regime, regime)
-def _build_api_payload(results: List, alert_type: str) -> List[dict]:
-    """Membangun list payload terstruktur dari result objects untuk dikirim ke Next.js API.
-    
-    Semua nilai numerik (tp1_pct, tp2_pct, sl_pct) sudah dikalkulasi di sini,
-    identik dengan yang dirender ke pesan Telegram — menjamin konsistensi data.
-    """
-    payload = []
-    for r in results:
-        tp1 = getattr(r, "tp1", None)
-        tp2 = getattr(r, "tp2", None)
-        tp1_valid = bool(tp1 and tp1 > r.price)
-        tp2_valid = bool(tp2 and tp2 > r.price)
-        tp1 = tp1 if tp1_valid else None
-        tp2 = tp2 if tp2_valid else None
-        tp1_pct = round(((tp1 - r.price) / r.price) * 100, 1) if tp1_valid else None
-        tp2_pct = round(((tp2 - r.price) / r.price) * 100, 1) if tp2_valid else None
-        payload.append({
-            "ticker": r.ticker.replace(".JK", ""),
-            "alert_price": r.price,
-            "change_percent": round(r.change_percent, 1),
-            "score": r.score,
-            "volume_ratio": round(r.volume_ratio, 1),
-            "daily_turnover": _format_transaction_value(getattr(r, "daily_turnover", 0)),
-            "market_regime": getattr(r, "market_regime", "UNKNOWN"),
-            "tp1": tp1,
-            "tp1_pct": tp1_pct,
-            "tp2": tp2,
-            "tp2_pct": tp2_pct,
-            "tp2_source": getattr(r, "tp2_source", None),
-            "entry_zone_low": getattr(r, "entry_zone_low", None),
-            "entry_zone_high": getattr(r, "entry_zone_high", None),
-            "sl": getattr(r, "sl", None),
-            "sl_pct": round(((r.sl - r.price) / r.price) * 100, 1)
-            if getattr(r, "sl", 0) and r.price > 0 else None,
-            "sl_source": getattr(r, "sl_source", None),
-            "alert_type": alert_type,
-            "alerted_at": datetime.now(WIB).isoformat(),
-            "status": "open",
-        })
-    return payload
 
 
-def _send_to_api(results: List, alert_type: str) -> None:
-    """Kirim data signal terstruktur ke Next.js API."""
+def _positive_price(value) -> "int | None":
+    value = float(value or 0.0)
+    return round(value) if value > 0 else None
+
+
+def _build_api_payload(result, alert_type: str) -> dict:
+    """Payload ticker alert untuk web app; harga yang tidak tampil di Telegram dikirim null."""
+    price = float(getattr(result, "price", 0.0) or 0.0)
+    entry_low = _positive_price(getattr(result, "entry_zone_low", None))
+    entry_high = _positive_price(getattr(result, "entry_zone_high", None))
+    if entry_low is None or entry_high is None or entry_low > entry_high:
+        entry_low = entry_high = None
+    tp_price = _positive_price(getattr(result, "tp1", None))
+    sl = _positive_price(getattr(result, "sl", None))
+    return {
+        "ticker": result.ticker.replace(".JK", ""),
+        "entry_low": entry_low,
+        "entry_high": entry_high,
+        "tp_price": tp_price if tp_price and tp_price > price else None,
+        "sl": sl if sl and sl < price else None,
+        "alert_type": alert_type,
+        "alerted_at": datetime.now(WIB).isoformat(timespec="seconds"),
+    }
+
+
+def _send_to_api(result, alert_type: str) -> None:
+    """Kirim satu ticker alert ke web app setelah pesan Telegram-nya terkirim."""
     if not SIGNAL_API_ENABLED or not SIGNAL_API_URL or not alert_type:
         return
+    if not BACKEND_WEBHOOK_SECRET:
+        logger.warning("BACKEND_WEBHOOK_SECRET not configured; ticker alert API skipped")
+        return
     try:
-        api_payload = _build_api_payload(results, alert_type)
         response = requests.post(
             SIGNAL_API_URL,
-            json=api_payload,
+            json=_build_api_payload(result, alert_type),
+            headers={"x-webhook-secret": BACKEND_WEBHOOK_SECRET},
             timeout=10,
         )
-        if response.status_code != 200:
-            logger.warning("Custom API error: %s", response.text)
+        if not response.ok:
+            logger.warning("Ticker alert API error: %s - %s", response.status_code, response.text)
     except Exception as exc:
-        logger.warning("Custom API call failed: %s", exc)
+        logger.warning("Ticker alert API call failed: %s", exc)
 
 
 def _format_sector(result) -> str:
@@ -419,11 +408,10 @@ def _chunked_alert_messages(results: List, format_fn) -> List[str]:
 
 def send_chunked_alert(results: List, format_fn, thread_id: "int | None" = None, alert_type: str = "") -> int:
     sent = 0
-    for msg in _chunked_alert_messages(results, format_fn):
-        if send_telegram_message(msg, thread_id=thread_id):
+    for result in _dedupe_results_by_ticker(results):
+        if send_telegram_message(format_fn([result]), thread_id=thread_id):
             sent += 1
-    if sent > 0:
-        _send_to_api(results, alert_type)
+            _send_to_api(result, alert_type)
     return sent
 
 
@@ -432,18 +420,18 @@ def send_all_alerts(signals: dict) -> int:
     if signals.get("bullish_break"):
         messages_sent += send_chunked_alert(
             signals["bullish_break"], format_bullish_break_message,
-            thread_id=TELEGRAM_SCANNER_TOPIC_ID,
+            thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="Breakout",
         )
     if signals.get("strong_buy"):
         messages_sent += send_chunked_alert(
-            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="strong_buy"
+            signals["strong_buy"], format_strong_buy_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="Strong Buy"
         )
     if signals.get("early_entry"):
         messages_sent += send_chunked_alert(
-            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="early_entry"
+            signals["early_entry"], format_early_entry_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="Early Entry"
         )
     if signals.get("reversal_watch"):
         messages_sent += send_chunked_alert(
-            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="reversal_watch"
+            signals["reversal_watch"], format_reversal_watch_message, thread_id=TELEGRAM_SCANNER_TOPIC_ID, alert_type="Reversal Watch"
         )
     return messages_sent

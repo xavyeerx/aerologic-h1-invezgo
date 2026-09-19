@@ -31,8 +31,9 @@ SIGNAL_API_ENABLED = os.getenv("SIGNAL_API_ENABLED", "false").strip().lower() in
 }
 SIGNAL_API_URL = os.getenv(
     "SIGNAL_API_URL",
-    "https://aerologicbot-web-app.vercel.app/api/webhook-bot-telegram",
+    "https://aerologicbot-web-app-vb11.vercel.app/api/ticker-alert",
 ).strip()
+BACKEND_WEBHOOK_SECRET = os.getenv("BACKEND_WEBHOOK_SECRET", "").strip()
 
 # Price and indicator settings
 BREAKOUT_LOOKBACK = 20
