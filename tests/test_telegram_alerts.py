@@ -26,7 +26,7 @@ def result(**overrides):
         "correction_percent": -4.5, "return20_pct": -10.0, "rsi": 32.0,
         "supertrend_value": 505.0, "supertrend_support": 480.0,
         "entry_zone_low": 500.0, "entry_zone_high": 510.0,
-        "sl": 480.0, "sl_source": "SUPPORT",
+        "sl": 475.0, "sl_source": "SUPPORT",
     }
     values.update(overrides)
     return SimpleNamespace(**values)
@@ -80,7 +80,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         alerted_at = payload.pop("alerted_at")
         self.assertEqual(payload, {
             "ticker": "PACK", "entry_low": 500, "entry_high": 510,
-            "tp_price": 541, "sl": 480, "alert_type": "Breakout",
+            "tp_price": 541, "sl": 475, "alert_type": "Breakout",
         })
         self.assertTrue(alerted_at.endswith("+07:00"))
 
@@ -177,7 +177,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("RBS: 505", message)
         self.assertNotIn("Total:", message)
 
-    def test_strong_buy_uses_supertrend_support_without_stop_loss(self):
+    def test_strong_buy_uses_entry_low_for_stop_loss_percentage(self):
         message = format_strong_buy_message([result()])
         self.assertIn("<b>🚀 STRONG BUY</b>", message)
         self.assertNotIn("Score", message)
@@ -189,7 +189,7 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("Support: 480", message)
         self.assertIn("Pastikan area Support (480) dijaga", message)
         self.assertIn("Entry Area: 500 - 510", message)
-        self.assertIn("SL: 480 (-5.9%)", message)
+        self.assertIn("SL: 475 (-5.0%)", message)
         self.assertNotIn("SUPPORT", message)
 
     def test_strong_buy_appends_sanitized_recent_news_context(self):
@@ -262,7 +262,26 @@ class TelegramAlertFormattingTests(unittest.TestCase):
         self.assertIn("Support: 480", message)
         self.assertNotIn("Strength", message)
         self.assertIn("Entry Area: 500 - 510", message)
-        self.assertIn("SL: 480 (-5.9%)", message)
+        self.assertIn("SL: 475 (-5.0%)", message)
+
+    def test_mmix_alert_formats_stop_from_lowest_entry(self):
+        message = format_strong_buy_message([result(
+            ticker="MMIX.JK",
+            price=890.0,
+            change_percent=0.6,
+            volume_ratio=1.0,
+            daily_turnover=12_200_000_000.0,
+            sector="Kesehatan",
+            entry_zone_low=875.0,
+            entry_zone_high=890.0,
+            sl=830.0,
+            tp1=925.0,
+            tp2=970.0,
+            supertrend_support=865.0,
+        )])
+        self.assertIn("Entry Area: 875 - 890", message)
+        self.assertIn("SL: 830 (-5.1%)", message)
+        self.assertIn("Support: 865", message)
 
 
 if __name__ == "__main__":

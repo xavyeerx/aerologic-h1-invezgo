@@ -199,19 +199,27 @@ def _daily_targets_from_h1(
 
 
 def _set_entry_and_stop_levels(result: ScanResult) -> None:
-    """Set a Daily-ATR pullback zone and a structure-aware 4-7% stop."""
+    """Set a Daily-ATR entry zone and an entry-low-anchored 5-7% stop."""
     price = float(result.price or 0.0)
     daily_atr = float(result.daily_atr or 0.0)
     if price <= 0:
         return
 
+    if not 0 < ALERT_SL_MIN_PCT <= ALERT_SL_MAX_PCT < 100:
+        raise ValueError("alert stop-loss percentages are invalid")
+
     support_levels = [result.supertrend_support, result.support]
     if getattr(result, "is_bullish_break", False):
         support_levels.append(result.supertrend_value)
-    nearby_supports = [
+    support_levels = [
         float(level)
         for level in support_levels
-        if level and price - daily_atr <= float(level) < price
+        if level and math.isfinite(float(level)) and 0 < float(level) < price
+    ]
+    nearby_supports = [
+        level
+        for level in support_levels
+        if price - daily_atr <= level
     ]
     reference_support = max(nearby_supports, default=0.0)
 
@@ -223,30 +231,35 @@ def _set_entry_and_stop_levels(result: ScanResult) -> None:
     if entry_low >= entry_high:
         entry_low = entry_high - _idx_tick_size(entry_high)
 
-    raw_structural_sl = (
-        reference_support - _idx_tick_size(reference_support)
-        if reference_support > 0
-        else price * 0.95
-    )
-    structural_risk = (price - raw_structural_sl) / price
-    if 0.04 <= structural_risk <= 0.07:
-        raw_sl = raw_structural_sl
+    # Normalize the corridor first so IDX tick rounding cannot understate the
+    # minimum risk or exceed the maximum risk from the lowest planned entry.
+    min_risk_fraction = ALERT_SL_MIN_PCT / 100.0
+    max_risk_fraction = ALERT_SL_MAX_PCT / 100.0
+    shallowest_sl = _idx_price_at_or_below(entry_low * (1.0 - min_risk_fraction))
+    deepest_sl = _idx_price_at_or_above(entry_low * (1.0 - max_risk_fraction))
+
+    structural_stops = [
+        _idx_price_at_or_below(level - _idx_tick_size(level))
+        for level in support_levels
+        if level < entry_low
+    ]
+    eligible_structural_stops = [
+        level for level in structural_stops
+        if deepest_sl <= level <= shallowest_sl
+    ]
+
+    if eligible_structural_stops:
+        # Use the nearest valid structural level and place the stop one tick
+        # below it, so a support breach—not an intraday touch—triggers the SL.
+        sl = max(eligible_structural_stops)
         sl_source = "SUPPORT"
-    elif structural_risk < 0.04:
-        raw_sl = price * 0.96
-        sl_source = "RISK_4PCT"
-    elif structural_risk > 0.07:
-        raw_sl = price * 0.93
+    elif structural_stops and max(structural_stops) < deepest_sl:
+        sl = deepest_sl
         sl_source = "RISK_7PCT"
     else:
-        raw_sl = price * 0.95
+        sl = shallowest_sl
         sl_source = "RISK_5PCT"
 
-    sl = (
-        _idx_price_at_or_below(raw_sl)
-        if sl_source in {"RISK_4PCT", "RISK_5PCT"}
-        else _idx_price_at_or_above(raw_sl)
-    )
     if sl >= entry_low:
         sl = entry_low - _idx_tick_size(entry_low)
     result.entry_zone_low = max(0.0, entry_low)

@@ -60,29 +60,66 @@ class SupertrendBreakTests(unittest.TestCase):
         _set_entry_and_stop_levels(result)
         self.assertLess(result.entry_zone_low, result.entry_zone_high)
         self.assertLess(result.sl, result.entry_zone_low)
-        risk_pct = (result.price - result.sl) / result.price * 100
-        self.assertGreaterEqual(risk_pct, 4.0)
+        risk_pct = (result.entry_zone_low - result.sl) / result.entry_zone_low * 100
+        self.assertGreaterEqual(risk_pct, 5.0)
         self.assertLessEqual(risk_pct, 7.0)
 
-    def test_four_percent_stop_rounds_down_without_understating_risk(self):
+    def test_stop_uses_lowest_entry_instead_of_alert_price(self):
         result = SimpleNamespace(
-            price=484.0,
-            daily_atr=36.0,
-            supertrend_support=0.0,
+            price=890.0,
+            daily_atr=30.0,
+            supertrend_support=865.0,
             support=0.0,
-            supertrend_value=473.0,
-            is_bullish_break=True,
+            supertrend_value=0.0,
+            is_bullish_break=False,
             entry_zone_low=0.0,
             entry_zone_high=0.0,
             sl=0.0,
             sl_source="",
         )
         _set_entry_and_stop_levels(result)
-        self.assertEqual(result.entry_zone_low, 474.0)
-        self.assertEqual(result.entry_zone_high, 484.0)
-        self.assertEqual(result.sl, 464.0)
-        self.assertEqual(result.sl_source, "RISK_4PCT")
-        self.assertGreaterEqual((result.price - result.sl) / result.price, 0.04)
+        self.assertEqual(result.entry_zone_low, 875.0)
+        self.assertEqual(result.entry_zone_high, 890.0)
+        self.assertEqual(result.sl, 830.0)
+        self.assertEqual(result.sl_source, "RISK_5PCT")
+        self.assertGreaterEqual((result.entry_zone_low - result.sl) / result.entry_zone_low, 0.05)
+
+    def test_stop_follows_valid_support_one_tick_below(self):
+        result = SimpleNamespace(
+            price=1_000.0,
+            daily_atr=80.0,
+            supertrend_support=950.0,
+            support=915.0,
+            supertrend_value=0.0,
+            is_bullish_break=False,
+            entry_zone_low=0.0,
+            entry_zone_high=0.0,
+            sl=0.0,
+            sl_source="",
+        )
+        _set_entry_and_stop_levels(result)
+        self.assertEqual(result.entry_zone_low, 960.0)
+        self.assertEqual(result.sl, 910.0)
+        self.assertEqual(result.sl_source, "SUPPORT")
+
+    def test_deep_support_is_capped_at_seven_percent_from_entry_low(self):
+        result = SimpleNamespace(
+            price=1_000.0,
+            daily_atr=80.0,
+            supertrend_support=0.0,
+            support=800.0,
+            supertrend_value=0.0,
+            is_bullish_break=False,
+            entry_zone_low=0.0,
+            entry_zone_high=0.0,
+            sl=0.0,
+            sl_source="",
+        )
+        _set_entry_and_stop_levels(result)
+        self.assertEqual(result.entry_zone_low, 960.0)
+        self.assertEqual(result.sl, 895.0)
+        self.assertEqual(result.sl_source, "RISK_7PCT")
+        self.assertLessEqual((result.entry_zone_low - result.sl) / result.entry_zone_low, 0.07)
 
     def test_tradingview_initializes_at_first_atr_bar_on_upper_band(self):
         frame = pd.DataFrame({

@@ -79,6 +79,8 @@ REVERSAL_WATCH_ALERT_ENABLED = os.getenv(
 
 # Risk and targets
 ARB_DROP_PCT_MIN = 13.0
+ALERT_SL_MIN_PCT = float(os.getenv("ALERT_SL_MIN_PCT", "5.0"))
+ALERT_SL_MAX_PCT = float(os.getenv("ALERT_SL_MAX_PCT", "7.0"))
 TP1_MULTIPLIER = 1.0
 TP2_MULTIPLIER = 2.5
 TP2_MIN_MULTIPLIER = 1.3

@@ -186,7 +186,8 @@ def _format_entry_and_sl(result) -> str:
     if 0 < entry_low <= entry_high:
         lines.append(f"Entry Area: {entry_low:,.0f} - {entry_high:,.0f}")
     if price > 0 and 0 < sl < price:
-        sl_pct = ((sl - price) / price) * 100
+        sl_reference = entry_low if 0 < entry_low <= entry_high else price
+        sl_pct = ((sl - sl_reference) / sl_reference) * 100
         lines.append(f"SL: {sl:,.0f} ({sl_pct:.1f}%)")
     return "\n".join(lines)
 

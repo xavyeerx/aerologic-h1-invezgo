@@ -25,9 +25,11 @@ berada di atas TP1. TP2 menggunakan resistance Daily yang valid atau fallback AT
 Daily.
 
 Alert juga menampilkan `Entry Area` dari harga alert hingga area pullback sekitar
-0,5 Daily ATR. SL menggunakan support teknikal terdekat apabila risikonya berada
-dalam rentang 4–7%; support yang terlalu dekat atau jauh dinormalisasi ke batas
-risiko 4% atau 7%, dengan fallback standar 5%.
+0,5 Daily ATR. Risiko SL dihitung dari batas bawah `Entry Area`, bukan dari harga
+alert. SL ditempatkan satu fraksi harga di bawah support teknikal terdekat yang
+berada dalam koridor risiko 5–7%. Support yang terlalu dekat dinormalisasi ke
+batas 5%, support yang terlalu jauh dibatasi 7%, dan kondisi tanpa support memakai
+fallback 5%.
 
 ## Jenis Alert
 
@@ -81,17 +83,23 @@ Klaim dilakukan sebelum pengiriman batch. Karena itu, kegagalan Telegram setelah
 ```text
 🚀 STRONG BUY
 --------------------------
-28 Aug 2026, 14:01 WIB
+25 Sep 2026, 09:11 WIB
 
-PACK | 510 (+9.4%)
-Vol 1.4x | Val 1,2B
+MMIX | 890 (+0.6%)
+Vol 1.0x | Val 12,2B
+
 Trend IHSG: SIDEWAYS
-TP1: 541 (+6.1%)
-TP2: 587 (+15.1%) ATR
-Support: 480
+Sector: Kesehatan
 
-Pastikan area Support (480) dijaga agar momentum masih bullish.
+Entry Area: 875 - 890
+SL: 830 (-5.1%)
+TP1: 925 (+3.9%)
+TP2: 970 (+9.0%)
+Support: 865
 
+Pastikan area Support (865) dijaga agar momentum masih bullish.
+
+DYOR. Bukan rekomendasi beli atau jual. Risiko di tangan masing-masing.
 Powered by Aerologic
 ```
 

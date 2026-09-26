@@ -93,12 +93,14 @@ may have notification side effects. Telegram is the authoritative sender. When
 backend sync is explicitly enabled, one payload is sent per alert batch rather than
 once per Telegram chunk.
 
-## Entry area and stop-loss amendment
+## Entry area and stop-loss amendment (updated 2026-09-26)
 
 The entry area spans from an eligible nearby support or a 0.5 Daily ATR pullback,
-whichever is higher, up to the realtime alert price. Stop-loss selection uses the
-nearest eligible Supertrend, pivot, or breakout support. A structural stop is used
-when its risk from the alert price is between 4% and 7%. Shallower support is
-normalized to 4% risk, deeper support is capped at 7%, and missing support falls
-back to 5%. All prices are normalized to valid IDX price fractions and must satisfy
+whichever is higher, up to the realtime alert price. Stop-loss risk is anchored to
+the entry-zone low rather than the realtime alert price. Selection considers
+Supertrend, pivot, and breakout support and places a structural stop one IDX tick
+below the nearest eligible support when that stop is within 5% to 7% of the
+entry-zone low. Shallower support is normalized to 5%, deeper support is capped at
+7%, and missing support falls back to 5%. All prices are normalized to valid IDX
+price fractions and must satisfy
 `SL < entry zone low <= entry zone high < TP1 < TP2`.
